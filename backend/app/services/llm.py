@@ -39,6 +39,7 @@ class ConversationResult:
     history: ChatHistory
     focus_phrase: Optional[str]
     focus_translation: Optional[str]
+    spoken_text: Optional[str]
     debug: Dict[str, str]
 
 
@@ -117,19 +118,31 @@ class ConversationService:
         prompt_parts.append("Assistant:")
         return "\n".join(prompt_parts)
 
+    @staticmethod
+    def _extract_lao_line(text: str) -> Optional[str]:
+        for line in text.splitlines():
+            candidate = line.strip()
+            if not candidate:
+                continue
+            if any("຀" <= char <= "໿" for char in candidate):
+                return candidate
+        return None
+
     def _fallback_reply(
         self, user_message: str, focus_phrase: Optional[str], focus_translation: Optional[str]
-    ) -> str:
+    ) -> tuple[str, Optional[str]]:
         if not focus_phrase:
-            return (
+            reply = (
                 "ສະບາຍດີ! I can guide you through Lao basics once vocabulary is loaded. "
                 "Ask me about greetings or numbers to begin."
             )
-        return (
+            return reply, None
+        reply = (
             f"ມາຝຶກກັນ! Repeat after me: {focus_phrase}. "
             f"It means {focus_translation or 'this is our target phrase today'}. "
             "Focus on the tone contour and say it once more."
         )
+        return reply, focus_phrase
 
     def generate(
         self, history: ChatHistory, user_message: str, task_id: Optional[str] = None
@@ -138,6 +151,8 @@ class ConversationService:
             raise ValueError("Message must not be empty")
 
         focus_phrase, focus_translation = self._select_focus_phrase(task_id)
+
+        spoken_text: Optional[str] = None
 
         if self._generator and self._tokenizer:
             prompt = self._format_prompt(history, user_message, focus_phrase, focus_translation)
@@ -150,15 +165,21 @@ class ConversationService:
                 )
                 generated = outputs[0]["generated_text"]
                 reply = generated[len(prompt) :].strip() or generated.strip()
+                spoken_text = self._extract_lao_line(reply)
             except Exception as exc:  # pragma: no cover - runtime safety
                 logger.warning("Generation failed (%s); using fallback response", exc)
-                reply = self._fallback_reply(user_message, focus_phrase, focus_translation)
+                reply, spoken_text = self._fallback_reply(user_message, focus_phrase, focus_translation)
                 debug = {"backend": "fallback", "reason": str(exc)}
             else:
                 debug = {"backend": "transformers", "model": self._model_name}
         else:
-            reply = self._fallback_reply(user_message, focus_phrase, focus_translation)
+            reply, spoken_text = self._fallback_reply(user_message, focus_phrase, focus_translation)
             debug = {"backend": "fallback"}
+
+        if not spoken_text:
+            spoken_text = self._extract_lao_line(reply)
+        if not spoken_text:
+            spoken_text = focus_phrase or None
 
         updated_history = history[-8:].copy()
         updated_history.append({"role": "user", "content": user_message})
@@ -169,6 +190,7 @@ class ConversationService:
             history=updated_history,
             focus_phrase=focus_phrase,
             focus_translation=focus_translation,
+            spoken_text=spoken_text,
             debug=debug,
         )
 

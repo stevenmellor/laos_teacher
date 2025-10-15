@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import base64
 import logging
-from typing import Any
+from typing import Any, Optional
 
 import numpy as np
 from fastapi import FastAPI, HTTPException, Request
@@ -179,6 +179,14 @@ def index(request: Request) -> Response:
             line-height: 1.55;
           }
 
+          .msg strong {
+            margin-right: 0.3rem;
+          }
+
+          .msg-text {
+            white-space: pre-wrap;
+          }
+
           .msg-user {
             align-self: flex-end;
             background: rgba(68, 80, 214, 0.12);
@@ -193,6 +201,33 @@ def index(request: Request) -> Response:
             margin-top: 0.4rem;
             font-size: 0.9rem;
             color: var(--text-muted);
+            display: inline-flex;
+            flex-wrap: wrap;
+            gap: 0.35rem;
+            align-items: baseline;
+            background: rgba(68, 80, 214, 0.08);
+            padding: 0.35rem 0.6rem;
+            border-radius: 8px;
+          }
+
+          .msg-spoken {
+            margin-top: 0.4rem;
+            font-size: 0.9rem;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            gap: 0.35rem;
+          }
+
+          .msg-feedback {
+            margin-top: 0.4rem;
+            font-size: 0.9rem;
+            color: var(--text-muted);
+          }
+
+          .msg-feedback ul {
+            margin: 0.3rem 0 0;
+            padding-left: 1.1rem;
           }
 
           .chat-form textarea {
@@ -211,6 +246,14 @@ def index(request: Request) -> Response:
             justify-content: space-between;
             align-items: center;
             margin-top: 0.6rem;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+          }
+
+          .chat-buttons {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
           }
 
           .chat-actions button {
@@ -222,6 +265,11 @@ def index(request: Request) -> Response:
             font-size: 1rem;
             cursor: pointer;
             transition: transform 0.1s ease;
+          }
+
+          .chat-actions button.secondary {
+            background: rgba(68, 80, 214, 0.12);
+            color: var(--accent);
           }
 
           .chat-actions button:disabled {
@@ -280,7 +328,7 @@ def index(request: Request) -> Response:
             <h2 id=\"section-chat\">Try the conversational tutor</h2>
             <div class=\"chat-card\">
               <div id=\"chat-log\" class=\"chat-log\" aria-live=\"polite\" aria-label=\"Tutor conversation\"></div>
-              <form id=\"chat-form\" class=\"chat-form\">\n                <label for=\"chat-input\" class=\"sr-only\">Your message</label>\n                <textarea id=\"chat-input\" name=\"message\" rows=\"3\" placeholder=\"Type in English or Lao...\" required></textarea>\n                <div class=\"chat-actions\">\n                  <button id=\"chat-send\" type=\"submit\">Send</button>\n                  <span id=\"chat-status\" class=\"chat-status\"></span>\n                </div>\n              </form>
+              <form id=\"chat-form\" class=\"chat-form\">\n                <label for=\"chat-input\" class=\"sr-only\">Your message</label>\n                <textarea id=\"chat-input\" name=\"message\" rows=\"3\" placeholder=\"Type in English or Lao...\"></textarea>\n                <div class=\"chat-actions\">\n                  <div class=\"chat-buttons\">\n                    <button id=\"chat-record\" type=\"button\" class=\"secondary\">🎙️ Record phrase</button>\n                    <button id=\"chat-send\" type=\"submit\">Send</button>\n                  </div>\n                  <span id=\"chat-status\" class=\"chat-status\"></span>\n                </div>\n              </form>
             </div>
           </section>
 
@@ -294,7 +342,7 @@ def index(request: Request) -> Response:
               </article>
               <article class=\"card\">
                 <h3>Send audio</h3>
-                <p>POST base64-encoded 16&nbsp;kHz mono PCM segments for analysis.</p>
+                <p>Record a phrase above or POST base64-encoded 16&nbsp;kHz PCM for analysis.</p>
                 <code>/api/v1/utterance</code>
               </article>
               <article class=\"card\">
@@ -308,9 +356,9 @@ def index(request: Request) -> Response:
           <section aria-labelledby=\"section-quickstart\">
             <h2 id=\"section-quickstart\">Quickstart</h2>
             <ol>
-              <li>Base64-encode your Lao utterance audio (16&nbsp;kHz mono) and POST it to <code>/api/v1/utterance</code>.</li>
-              <li>Receive transcription feedback, teaching prompts, and synthesized teacher audio.</li>
-              <li>Poll <code>/health</code> to verify ASR/TTS availability.</li>
+              <li>Click <strong>🎙️ Record phrase</strong> above to capture a Lao utterance or POST a base64 clip to <code>/api/v1/utterance</code>.</li>
+              <li>Review the recognised Lao, romanisation, and corrections, then listen back to the teacher audio.</li>
+              <li>Poll <code>/health</code> to verify ASR/TTS/LLM availability before integrating a client.</li>
             </ol>
           </section>
 
@@ -320,13 +368,20 @@ def index(request: Request) -> Response:
         </main>
         <script>
           (function () {
+            const TARGET_SAMPLE_RATE = 16000;
             const chatLog = document.getElementById('chat-log');
             const chatForm = document.getElementById('chat-form');
             const chatInput = document.getElementById('chat-input');
             const chatSend = document.getElementById('chat-send');
             const chatStatus = document.getElementById('chat-status');
+            const recordBtn = document.getElementById('chat-record');
             let history = [];
             let audioContext;
+            let mediaRecorder;
+            let recordingStream;
+            let audioChunks = [];
+            let isRecording = false;
+            let pendingUserEntry = null;
 
             function ensureAudioContext() {
               if (!audioContext) {
@@ -338,32 +393,155 @@ def index(request: Request) -> Response:
               return audioContext;
             }
 
+            function setStatus(message) {
+              chatStatus.textContent = message || '';
+            }
+
             function appendMessage(role, content, options = {}) {
               const entry = document.createElement('div');
               entry.className = role === 'assistant' ? 'msg msg-assistant' : 'msg msg-user';
-              const roleLabel = role === 'assistant' ? 'Tutor' : 'You';
-              entry.innerHTML = `<strong>${roleLabel}:</strong> ${content}`;
+              entry.dataset.role = role;
+              const label = document.createElement('strong');
+              label.textContent = role === 'assistant' ? 'Tutor:' : 'You:';
+              entry.appendChild(label);
+              const span = document.createElement('span');
+              span.className = 'msg-text';
+              span.textContent = ` ${content}`;
+              entry.appendChild(span);
               if (options.focusPhrase) {
-                const focus = document.createElement('div');
-                focus.className = 'msg-focus';
-                focus.innerHTML = `Focus phrase: <span class="lao">${options.focusPhrase}</span>${options.focusTranslation ? ` · <span>${options.focusTranslation}</span>` : ''}`;
-                entry.appendChild(focus);
+                appendFocus(entry, options.focusPhrase, options.focusTranslation);
+              }
+              if (options.spokenText) {
+                appendSpoken(entry, options.spokenText);
               }
               chatLog.appendChild(entry);
               chatLog.scrollTop = chatLog.scrollHeight;
+              return entry;
             }
 
-            function playTeacherAudio(base64, sampleRate) {
+            function appendFocus(entry, phrase, translation) {
+              if (!phrase) return;
+              const focus = document.createElement('div');
+              focus.className = 'msg-focus';
+              focus.textContent = 'Focus phrase: ';
+              const laoSpan = document.createElement('span');
+              laoSpan.className = 'lao';
+              laoSpan.textContent = phrase;
+              focus.appendChild(laoSpan);
+              if (translation) {
+                const translationSpan = document.createElement('span');
+                translationSpan.textContent = ` · ${translation}`;
+                focus.appendChild(translationSpan);
+              }
+              entry.appendChild(focus);
+            }
+
+            function appendSpoken(entry, spokenText) {
+              if (!spokenText) return;
+              const spoken = document.createElement('div');
+              spoken.className = 'msg-spoken';
+              spoken.innerHTML = `<span aria-hidden="true">🎧</span><span>Spoken reply: ${spokenText}</span>`;
+              entry.appendChild(spoken);
+            }
+
+            function appendUtteranceFeedback(entry, feedback) {
+              if (!feedback) return;
+              const wrap = document.createElement('div');
+              wrap.className = 'msg-feedback';
+              const details = [];
+              if (feedback.lao_text) {
+                details.push(`Heard: ${feedback.lao_text}`);
+              }
+              if (feedback.romanised) {
+                details.push(`Romanisation: ${feedback.romanised}`);
+              }
+              if (feedback.translation) {
+                details.push(`Meaning: ${feedback.translation}`);
+              }
+              wrap.textContent = details.join(' · ');
+              if (feedback.corrections && feedback.corrections.length) {
+                const list = document.createElement('ul');
+                feedback.corrections.forEach((hint) => {
+                  const item = document.createElement('li');
+                  item.textContent = hint;
+                  list.appendChild(item);
+                });
+                wrap.appendChild(list);
+              }
+              if (feedback.praise) {
+                const praise = document.createElement('div');
+                praise.textContent = feedback.praise;
+                wrap.appendChild(praise);
+              }
+              entry.appendChild(wrap);
+            }
+
+            function updateMessage(entry, content) {
+              if (!entry) return;
+              const span = entry.querySelector('.msg-text');
+              if (span) {
+                span.textContent = ` ${content}`;
+              }
+            }
+
+            function floatToPcm16Base64(floatArray) {
+              const buffer = new ArrayBuffer(floatArray.length * 2);
+              const view = new DataView(buffer);
+              for (let i = 0; i < floatArray.length; i += 1) {
+                const sample = Math.max(-1, Math.min(1, floatArray[i]));
+                view.setInt16(i * 2, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true);
+              }
+              const bytes = new Uint8Array(buffer);
+              let binary = '';
+              const chunkSize = 0x8000;
+              for (let i = 0; i < bytes.length; i += chunkSize) {
+                const chunk = bytes.subarray(i, i + chunkSize);
+                binary += String.fromCharCode.apply(null, Array.from(chunk));
+              }
+              return btoa(binary);
+            }
+
+            function downsampleToTarget(audioBuffer) {
+              const sourceRate = audioBuffer.sampleRate;
+              const channelData = audioBuffer.getChannelData(0);
+              if (sourceRate === TARGET_SAMPLE_RATE) {
+                return new Float32Array(channelData);
+              }
+              const ratio = sourceRate / TARGET_SAMPLE_RATE;
+              const length = Math.round(channelData.length / ratio);
+              const result = new Float32Array(length);
+              let offsetResult = 0;
+              let offsetBuffer = 0;
+              while (offsetResult < length) {
+                const nextOffsetBuffer = Math.min(channelData.length, Math.round((offsetResult + 1) * ratio));
+                let accum = 0;
+                let count = 0;
+                for (let i = offsetBuffer; i < nextOffsetBuffer; i += 1) {
+                  accum += channelData[i];
+                  count += 1;
+                }
+                result[offsetResult] = count > 0 ? accum / count : 0;
+                offsetResult += 1;
+                offsetBuffer = nextOffsetBuffer;
+              }
+              return result;
+            }
+
+            async function playTeacherAudio(base64, sampleRate) {
               if (!base64 || !sampleRate) return;
               const ctx = ensureAudioContext();
               if (!ctx) return;
-              const binary = atob(base64);
-              const buffer = new ArrayBuffer(binary.length);
-              const view = new Uint8Array(buffer);
-              for (let i = 0; i < binary.length; i += 1) {
-                view[i] = binary.charCodeAt(i);
+              try {
+                await ctx.resume();
+              } catch (err) {
+                console.warn('Audio context resume failed', err);
               }
-              const floatView = new Float32Array(buffer);
+              const binary = atob(base64);
+              const bytes = new Uint8Array(binary.length);
+              for (let i = 0; i < binary.length; i += 1) {
+                bytes[i] = binary.charCodeAt(i);
+              }
+              const floatView = new Float32Array(bytes.buffer);
               const audioBuffer = ctx.createBuffer(1, floatView.length, sampleRate);
               audioBuffer.copyToChannel(floatView, 0);
               const source = ctx.createBufferSource();
@@ -372,45 +550,154 @@ def index(request: Request) -> Response:
               source.start();
             }
 
-            chatForm.addEventListener('submit', async (event) => {
-              event.preventDefault();
-              const message = chatInput.value.trim();
-              if (!message) return;
-              appendMessage('user', message);
-              chatInput.value = '';
-              chatInput.focus();
+            async function sendConversation(payload, { userEntry } = {}) {
               chatSend.disabled = true;
-              chatStatus.textContent = 'Thinking…';
-
+              if (recordBtn) {
+                recordBtn.disabled = true;
+              }
+              setStatus('Thinking…');
               try {
                 const response = await fetch('/api/v1/conversation', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ message, history }),
+                  body: JSON.stringify({ ...payload, history }),
                 });
                 if (!response.ok) {
                   throw new Error(`HTTP ${response.status}`);
                 }
                 const data = await response.json();
                 history = data.history || [];
-                const reply = data.reply?.content || 'I am still getting ready to chat.';
-                appendMessage('assistant', reply, {
+                if (userEntry && data.heard_text) {
+                  updateMessage(userEntry, `🎤 ${data.heard_text}`);
+                }
+                const replyEntry = appendMessage('assistant', data.reply?.content || 'I am still getting ready to chat.', {
                   focusPhrase: data.focus_phrase,
                   focusTranslation: data.focus_translation,
+                  spokenText: data.spoken_text,
                 });
+                appendUtteranceFeedback(replyEntry, data.utterance_feedback);
                 if (data.teacher_audio_base64 && data.teacher_audio_sample_rate) {
-                  playTeacherAudio(data.teacher_audio_base64, data.teacher_audio_sample_rate);
+                  await playTeacherAudio(data.teacher_audio_base64, data.teacher_audio_sample_rate);
                 }
               } catch (error) {
-                appendMessage('assistant', 'I ran into a problem understanding that. Please try again after a moment.');
                 console.error(error);
+                appendMessage('assistant', 'I ran into a problem understanding that. Please try again after a moment.');
               } finally {
                 chatSend.disabled = false;
-                chatStatus.textContent = '';
+                if (recordBtn) {
+                  recordBtn.disabled = false;
+                }
+                setStatus('');
               }
+            }
+
+            chatForm.addEventListener('submit', async (event) => {
+              event.preventDefault();
+              const message = chatInput.value.trim();
+              if (!message) return;
+              const userEntry = appendMessage('user', message);
+              chatInput.value = '';
+              chatInput.focus();
+              await sendConversation({ message }, { userEntry });
             });
+
+            async function startRecording() {
+              if (!navigator.mediaDevices || !window.MediaRecorder) {
+                appendMessage('assistant', 'Microphone recording is not supported in this browser.');
+                return;
+              }
+              try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                recordingStream = stream;
+                const options = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+                  ? { mimeType: 'audio/webm;codecs=opus' }
+                  : undefined;
+                mediaRecorder = new MediaRecorder(stream, options);
+                audioChunks = [];
+                mediaRecorder.ondataavailable = (event) => {
+                  if (event.data && event.data.size > 0) {
+                    audioChunks.push(event.data);
+                  }
+                };
+                mediaRecorder.onstart = () => {
+                  pendingUserEntry = appendMessage('user', '🎤 Listening…');
+                  setStatus('Recording… tap stop when finished.');
+                  chatSend.disabled = true;
+                };
+                mediaRecorder.onstop = async () => {
+                  setStatus('Processing audio…');
+                  chatSend.disabled = false;
+                  if (recordBtn) {
+                    recordBtn.disabled = true;
+                  }
+                  try {
+                    if (pendingUserEntry) {
+                      updateMessage(pendingUserEntry, '🎤 Processing audio…');
+                    }
+                    const blob = new Blob(audioChunks, { type: mediaRecorder.mimeType });
+                    const arrayBuffer = await blob.arrayBuffer();
+                    const ctx = ensureAudioContext();
+                    if (!ctx) {
+                      appendMessage('assistant', 'Audio playback is not supported in this environment.');
+                      return;
+                    }
+                    const audioBuffer = await ctx.decodeAudioData(arrayBuffer.slice(0));
+                    const floatData = downsampleToTarget(audioBuffer);
+                    const base64 = floatToPcm16Base64(floatData);
+                    await sendConversation(
+                      { audio_base64: base64, sample_rate: TARGET_SAMPLE_RATE },
+                      { userEntry: pendingUserEntry }
+                    );
+                  } catch (error) {
+                    console.error(error);
+                    appendMessage('assistant', 'I could not process that audio clip. Please try again.');
+                  } finally {
+                    if (recordBtn) {
+                      recordBtn.disabled = false;
+                      recordBtn.textContent = '🎙️ Record phrase';
+                    }
+                    setStatus('');
+                    pendingUserEntry = null;
+                    if (recordingStream) {
+                      recordingStream.getTracks().forEach((track) => track.stop());
+                      recordingStream = null;
+                    }
+                  }
+                };
+                mediaRecorder.start();
+                isRecording = true;
+                if (recordBtn) {
+                  recordBtn.textContent = '⏹️ Stop recording';
+                }
+              } catch (error) {
+                console.error(error);
+                appendMessage('assistant', 'Microphone permission was denied or not available.');
+              }
+            }
+
+            function stopRecording() {
+              if (mediaRecorder && isRecording) {
+                mediaRecorder.stop();
+                isRecording = false;
+              }
+            }
+
+            if (recordBtn) {
+              if (!navigator.mediaDevices || !window.MediaRecorder) {
+                recordBtn.disabled = true;
+                recordBtn.textContent = 'Recording unavailable';
+              }
+              recordBtn.addEventListener('click', async () => {
+                if (isRecording) {
+                  stopRecording();
+                } else {
+                  await startRecording();
+                }
+              });
+            }
           })();
         </script>
+
       </body>
     </html>
     """
@@ -467,26 +754,64 @@ def handle_utterance(payload: UtteranceRequest) -> UtteranceResponse:
 @app.post("/api/v1/conversation", response_model=ConversationResponse)
 def handle_conversation(payload: ConversationRequest) -> ConversationResponse:
     history_payload = [message.dict() for message in payload.history]
+
+    sample_rate = payload.sample_rate or settings.sample_rate
+    utterance_feedback: Optional[SegmentFeedback] = None
+    heard_text: Optional[str] = None
+
+    message_text = payload.message.strip() if payload.message else ""
+
+    if payload.audio_base64:
+        audio = _decode_audio(payload.audio_base64, sample_rate)
+        utterance_feedback = tutor_engine.process_audio(audio, sample_rate, payload.task_id)
+        heard_text = utterance_feedback.lao_text or None
+        if not message_text:
+            message_text = utterance_feedback.lao_text or utterance_feedback.romanised or ""
+        if not message_text and utterance_feedback.corrections:
+            message_text = utterance_feedback.corrections[0]
+
+    if not message_text.strip():
+        message_text = "I could not speak clearly."
+
     try:
-        result = conversation_service.generate(history_payload, payload.message, payload.task_id)
+        result = conversation_service.generate(history_payload, message_text, payload.task_id)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     tts_result = None
-    if result.focus_phrase:
+    spoken_text = result.spoken_text
+    if spoken_text:
+        tts_result = tutor_engine.prepare_teacher_audio(text_override=spoken_text)
+    elif result.focus_phrase:
         tts_result = tutor_engine.prepare_teacher_audio(text_override=result.focus_phrase)
 
     response_history = [ChatMessage(**entry) for entry in result.history]
     reply_message = ChatMessage(role="assistant", content=result.reply_text)
 
+    debug_payload: dict[str, Any] = dict(result.debug)
+    if payload.audio_base64:
+        debug_payload.update(
+            {
+                "audio_processed": True,
+                "sample_rate": sample_rate,
+                "vad_backend": tutor_engine.vad.backend_name,
+                "asr_ready": tutor_engine.asr.is_ready,
+            }
+        )
+    else:
+        debug_payload.setdefault("audio_processed", False)
+
     return ConversationResponse(
         reply=reply_message,
         history=response_history,
+        heard_text=heard_text,
         focus_phrase=result.focus_phrase,
         focus_translation=result.focus_translation,
+        spoken_text=spoken_text,
+        utterance_feedback=utterance_feedback,
         teacher_audio_base64=tts_result.audio_base64 if tts_result else None,
         teacher_audio_sample_rate=tts_result.sample_rate if tts_result else None,
-        debug=result.debug,
+        debug=debug_payload,
     )
 
 

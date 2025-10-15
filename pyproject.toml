@@ -26,6 +26,8 @@ speech = [
   "praat-parselmouth>=0.4,<0.5",
   "sentence-transformers>=3.0,<4.0",
   "laonlp>=0.4,<0.5",
+  "transformers>=4.44,<5.0",
+  "torch>=2.2,<3.0",
 ]
 llm = [
   "transformers>=4.44,<5.0",

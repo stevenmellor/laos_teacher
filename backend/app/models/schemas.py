@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import List, Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, root_validator
 
 
 class UtteranceRequest(BaseModel):
@@ -52,7 +52,15 @@ class ChatMessage(BaseModel):
 
 
 class ConversationRequest(BaseModel):
-    message: str = Field(..., description="Latest learner utterance in text form")
+    message: Optional[str] = Field(
+        None, description="Latest learner utterance in text form (optional when audio is provided)"
+    )
+    audio_base64: Optional[str] = Field(
+        None, description="Optional base64 encoded learner audio clip (PCM)"
+    )
+    sample_rate: Optional[int] = Field(
+        None, description="Sample rate of the provided learner audio clip"
+    )
     history: List[ChatMessage] = Field(
         default_factory=list, description="Prior conversation turns for additional context"
     )
@@ -60,15 +68,33 @@ class ConversationRequest(BaseModel):
         default=None, description="Optional curriculum task identifier to steer the conversation"
     )
 
+    @root_validator(pre=True)
+    def check_message_or_audio(cls, values: dict) -> dict:
+        message = values.get("message")
+        audio = values.get("audio_base64")
+        if (not message or not str(message).strip()) and not audio:
+            raise ValueError("Either 'message' or 'audio_base64' must be provided")
+        return values
+
 
 class ConversationResponse(BaseModel):
     reply: ChatMessage
     history: List[ChatMessage]
+    heard_text: Optional[str] = Field(
+        default=None, description="Learner utterance decoded from audio, if supplied"
+    )
     focus_phrase: Optional[str] = Field(
         default=None, description="Lao phrase the tutor suggests practising"
     )
     focus_translation: Optional[str] = Field(
         default=None, description="English gloss for the focus phrase"
+    )
+    spoken_text: Optional[str] = Field(
+        default=None,
+        description="Portion of the tutor reply that was synthesised into speech",
+    )
+    utterance_feedback: Optional[SegmentFeedback] = Field(
+        default=None, description="Detailed feedback derived from the learner's spoken audio"
     )
     teacher_audio_base64: Optional[str] = Field(
         default=None, description="Optional teacher audio clip encoded as base64 float32 PCM"

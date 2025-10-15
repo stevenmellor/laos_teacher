@@ -49,6 +49,14 @@ class Settings(BaseSettings):
         0.7,
         description="Sampling temperature applied during conversational generation",
     )
+    tts_model_name: str = Field(
+        "facebook/mms-tts-lao",
+        description="Hugging Face identifier for the Lao text-to-speech voice",
+    )
+    tts_device: str = Field(
+        "cpu",
+        description="Preferred device for TTS inference (cpu, cuda, mps)",
+    )
 
     class Config:
         env_prefix = "LAO_TUTOR_"

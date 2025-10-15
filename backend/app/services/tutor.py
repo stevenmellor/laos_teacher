@@ -32,7 +32,7 @@ class TutorEngine:
         settings = get_settings()
         self.vad = VoiceActivityDetector(sample_rate=settings.sample_rate, threshold=settings.vad_threshold)
         self.asr = AsrService()
-        self.tts = TtsService()
+        self.tts = TtsService(settings.tts_model_name, settings.tts_device)
         self.text_processor = LaoTextProcessor()
         self.srs = SrsRepository(settings.sqlite_path)
         self.state = TutorState()

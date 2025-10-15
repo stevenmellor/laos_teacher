@@ -1,3 +1,7 @@
+
+import base64
+import struct
+
 from fastapi.testclient import TestClient
 
 from backend.app.main import app
@@ -44,3 +48,28 @@ def test_conversation_endpoint_returns_reply():
     assert payload["reply"]["content"]
     assert isinstance(payload["history"], list)
     assert payload["history"], "History should include the new turn"
+    assert "heard_text" in payload
+    assert "spoken_text" in payload
+    assert payload["utterance_feedback"] is None
+
+
+def test_conversation_rejects_empty_payload():
+    client = TestClient(app)
+    response = client.post("/api/v1/conversation", json={"history": []})
+    assert response.status_code == 422
+
+
+def test_conversation_accepts_audio_only():
+    client = TestClient(app)
+    silence = struct.pack("<16h", *([0] * 16))
+    payload = {
+        "audio_base64": base64.b64encode(silence).decode("utf-8"),
+        "sample_rate": 16000,
+        "history": [],
+    }
+    response = client.post("/api/v1/conversation", json=payload)
+    assert response.status_code == 200
+    body = response.json()
+    assert body["reply"]["role"] == "assistant"
+    assert body["utterance_feedback"] is not None
+    assert "spoken_text" in body
