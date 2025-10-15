@@ -1,14 +1,13 @@
 """Core tutoring logic for handling learner utterances."""
 from __future__ import annotations
 
-import base64
-import logging
 from dataclasses import dataclass
 from typing import Dict, List, Optional
 
 import numpy as np
 
 from ..config import get_settings
+from ..logging_utils import get_logger
 from ..models.schemas import SegmentFeedback
 from .asr import AsrService
 from .nlp import LaoTextProcessor
@@ -16,7 +15,8 @@ from .srs import SrsRepository
 from .tts import TtsResult, TtsService
 from .vad import VoiceActivityDetector
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
+logger.debug("Tutor engine module loaded")
 
 
 @dataclass
@@ -37,10 +37,17 @@ class TutorEngine:
         self.srs = SrsRepository(settings.sqlite_path)
         self.state = TutorState()
         self._phrase_bank = self._load_phrase_bank()
+        logger.info(
+            "Tutor engine initialised",
+            extra={
+                "task": self.state.current_task,
+                "vad_backend": self.vad.backend_name,
+            },
+        )
 
     def _load_phrase_bank(self) -> Dict[str, Dict[str, str]]:
         # Minimal seed content; in real usage load from JSON/DB
-        return {
+        bank = {
             "day1_greetings": {
                 "ສະບາຍດີ": "Hello",
                 "ຂອບໃຈ": "Thank you",
@@ -52,13 +59,19 @@ class TutorEngine:
                 "ສອງ": "2",
             },
         }
+        logger.debug("Phrase bank loaded", extra={"tasks": list(bank.keys())})
+        return bank
 
     def process_audio(self, audio: np.ndarray, sample_rate: int, task_id: Optional[str] = None) -> SegmentFeedback:
         if task_id:
             self.state.current_task = task_id
+            logger.debug("Task updated", extra={"task_id": task_id})
         vad_result = self.vad.detect(audio, sample_rate)
         if not vad_result.has_speech:
-            logger.debug("No speech detected (prob=%.2f)", vad_result.probability)
+            logger.debug(
+                "No speech detected",
+                extra={"probability": vad_result.probability, "task": self.state.current_task},
+            )
             return SegmentFeedback(
                 lao_text="",
                 romanised="",
@@ -80,6 +93,10 @@ class TutorEngine:
         else:
             praise = "ດີຫຼາຍ! Great job!"
             self.srs.log_review(card_id=asr_result.text, ease=1.0)
+            logger.info(
+                "Learner phrase recognised",
+                extra={"text": asr_result.text, "task": self.state.current_task},
+            )
 
         return SegmentFeedback(
             lao_text=asr_result.text,
@@ -101,10 +118,16 @@ class TutorEngine:
             bank = self._phrase_bank.get(self.state.current_task, {})
             text = next(iter(bank.keys()), "")
         if not text:
+            logger.debug("No text available for TTS", extra={"task": self.state.current_task})
             return None
         tts_result = self.tts.synthesize(text)
         if tts_result is None:
+            logger.warning("TTS synthesis failed", extra={"text": text})
             return None
+        logger.debug(
+            "Prepared teacher audio",
+            extra={"text": text, "sample_rate": tts_result.sample_rate},
+        )
         return tts_result
 
     def get_phrase_bank(self, task_id: Optional[str] = None) -> Dict[str, str]:

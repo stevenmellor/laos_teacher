@@ -1,13 +1,14 @@
 """Conversational LLM orchestration for the Lao tutor."""
 from __future__ import annotations
 
-import logging
 from dataclasses import dataclass
 from typing import Dict, List, Optional
 
 from ..config import get_settings
+from ..logging_utils import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
+logger.debug("Conversation service module loaded")
 
 try:  # pragma: no cover - optional dependency path
     from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline  # type: ignore
@@ -77,9 +78,15 @@ class ConversationService:
                     tokenizer=self._tokenizer,
                     device=device,
                 )
-                logger.info("Loaded conversational model %s", self._model_name)
+                logger.info(
+                    "Loaded conversational model",
+                    extra={"model": self._model_name, "device": self._device},
+                )
             except Exception as exc:  # pragma: no cover - optional failure path
-                logger.warning("Conversation model unavailable (%s); falling back to scripted replies", exc)
+                logger.warning(
+                    "Conversation model unavailable; falling back to scripted replies",
+                    exc_info=exc,
+                )
         else:
             logger.warning("Transformers/torch unavailable; using scripted conversation fallback")
 
@@ -152,6 +159,15 @@ class ConversationService:
 
         focus_phrase, focus_translation = self._select_focus_phrase(task_id)
 
+        logger.info(
+            "Generating tutor response",
+            extra={
+                "history_turns": len(history),
+                "task_id": task_id,
+                "focus_phrase": focus_phrase,
+            },
+        )
+
         spoken_text: Optional[str] = None
 
         if self._generator and self._tokenizer:
@@ -167,14 +183,19 @@ class ConversationService:
                 reply = generated[len(prompt) :].strip() or generated.strip()
                 spoken_text = self._extract_lao_line(reply)
             except Exception as exc:  # pragma: no cover - runtime safety
-                logger.warning("Generation failed (%s); using fallback response", exc)
+                logger.warning("Generation failed; using fallback response", exc_info=exc)
                 reply, spoken_text = self._fallback_reply(user_message, focus_phrase, focus_translation)
                 debug = {"backend": "fallback", "reason": str(exc)}
             else:
                 debug = {"backend": "transformers", "model": self._model_name}
+                logger.debug(
+                    "Generated response via transformers",
+                    extra={"reply_chars": len(reply), "spoken": bool(spoken_text)},
+                )
         else:
             reply, spoken_text = self._fallback_reply(user_message, focus_phrase, focus_translation)
             debug = {"backend": "fallback"}
+            logger.debug("Using scripted fallback reply")
 
         if not spoken_text:
             spoken_text = self._extract_lao_line(reply)
@@ -184,6 +205,15 @@ class ConversationService:
         updated_history = history[-8:].copy()
         updated_history.append({"role": "user", "content": user_message})
         updated_history.append({"role": "assistant", "content": reply})
+
+        logger.debug(
+            "Conversation response prepared",
+            extra={
+                "history_length": len(updated_history),
+                "spoken_text": spoken_text,
+                "focus_phrase": focus_phrase,
+            },
+        )
 
         return ConversationResult(
             reply_text=reply,

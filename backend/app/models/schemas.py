@@ -5,6 +5,11 @@ from typing import List, Literal, Optional
 
 from pydantic import BaseModel, Field, root_validator
 
+from ..logging_utils import get_logger
+
+logger = get_logger(__name__)
+logger.debug("Schemas module loaded")
+
 
 class UtteranceRequest(BaseModel):
     """Incoming audio buffer encoded as base64."""
@@ -73,7 +78,15 @@ class ConversationRequest(BaseModel):
         message = values.get("message")
         audio = values.get("audio_base64")
         if (not message or not str(message).strip()) and not audio:
+            logger.warning("ConversationRequest missing message and audio")
             raise ValueError("Either 'message' or 'audio_base64' must be provided")
+        logger.debug(
+            "ConversationRequest payload accepted",
+            extra={
+                "has_message": bool(message and str(message).strip()),
+                "has_audio": bool(audio),
+            },
+        )
         return values
 
 

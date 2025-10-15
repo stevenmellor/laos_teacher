@@ -3,12 +3,15 @@ from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import Path
-from typing import Optional
 
 try:  # pragma: no cover - import resolution differs across Pydantic versions
     from pydantic import BaseSettings, Field
 except Exception:  # Pydantic v2 raises a custom error; fall back to the v1 compatibility layer
     from pydantic.v1 import BaseSettings, Field  # type: ignore
+
+from .logging_utils import configure_logging, get_logger
+
+logger = get_logger(__name__)
 
 
 class Settings(BaseSettings):
@@ -18,6 +21,7 @@ class Settings(BaseSettings):
     environment: str = Field("development", description="Current execution environment")
     data_dir: Path = Field(Path("data"), description="Directory for persistent data files")
     model_dir: Path = Field(Path("models"), description="Directory containing ML models")
+    log_dir: Path = Field(Path("logs"), description="Directory where application logs are written")
     whisper_model_size: str = Field(
         "small", description="Default Whisper model size identifier (tiny, base, small, medium, large)"
     )
@@ -72,6 +76,9 @@ def get_settings() -> Settings:
     settings.data_dir.mkdir(parents=True, exist_ok=True)
     settings.model_dir.mkdir(parents=True, exist_ok=True)
     settings.sqlite_path.parent.mkdir(parents=True, exist_ok=True)
+    settings.log_dir.mkdir(parents=True, exist_ok=True)
+    configure_logging(settings.log_dir)
+    logger.debug("Settings initialized", extra={"environment": settings.environment})
     return settings
 
 

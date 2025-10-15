@@ -1,15 +1,16 @@
 """Automatic speech recognition service built around Whisper."""
 from __future__ import annotations
 
-import logging
 from dataclasses import dataclass
 from typing import Optional
 
 import numpy as np
 
 from ..config import get_settings
+from ..logging_utils import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
+logger.debug("ASR service module loaded")
 
 try:  # pragma: no cover - optional dependency
     from faster_whisper import WhisperModel  # type: ignore
@@ -47,9 +48,12 @@ class AsrService:
                     device=self.device,
                     download_root=str(settings.model_dir),
                 )
-                logger.info("Loaded Whisper model %s", self.model_size)
+                logger.info(
+                    "Loaded Whisper model",
+                    extra={"model_size": self.model_size, "device": self.device},
+                )
             except Exception as exc:  # pragma: no cover - best-effort load
-                logger.warning("Could not load Whisper model: %s", exc)
+                logger.warning("Could not load Whisper model", exc_info=exc)
         else:
             logger.warning("faster-whisper not available; ASR will return placeholders")
 
@@ -71,6 +75,13 @@ class AsrService:
             temperature=0.0,
         )
         text = " ".join(seg.text.strip() for seg in segments)
+        logger.debug(
+            "ASR transcription complete",
+            extra={
+                "text": text.strip(),
+                "confidence": getattr(info, "language_probability", None),
+            },
+        )
         return AsrResult(text=text.strip(), language=info.language, confidence=info.language_probability)
 
 

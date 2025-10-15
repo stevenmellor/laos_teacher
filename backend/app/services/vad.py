@@ -1,11 +1,12 @@
 """Voice activity detection utilities."""
 from __future__ import annotations
 
-import logging
 from dataclasses import dataclass
 from typing import Optional
 
 import numpy as np
+
+from ..logging_utils import get_logger
 
 try:  # pragma: no cover - optional dependency
     import webrtcvad  # type: ignore
@@ -31,7 +32,8 @@ except Exception:  # pragma: no cover - optional dependency
     load_silero_vad = None  # type: ignore
     _SILERO_AVAILABLE = False
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
+logger.debug("VAD service module loaded")
 
 
 @dataclass
@@ -57,13 +59,13 @@ class VoiceActivityDetector:
                 self._webrtc_vad = webrtcvad.Vad(2)  # type: ignore[attr-defined]
                 logger.info("Loaded WebRTC VAD")
             except Exception as exc:  # pragma: no cover - best-effort load
-                logger.warning("Failed to load WebRTC VAD: %s", exc)
+                logger.warning("Failed to load WebRTC VAD", exc_info=exc)
         if self._webrtc_vad is None and _SILERO_AVAILABLE and _TORCH_AVAILABLE:
             try:
                 self._silero_model = load_silero_vad()
                 logger.info("Loaded Silero VAD model")
             except Exception as exc:  # pragma: no cover - best-effort load
-                logger.warning("Failed to load Silero VAD, falling back to energy gate: %s", exc)
+                logger.warning("Failed to load Silero VAD, falling back to energy gate", exc_info=exc)
         if self._webrtc_vad is None and self._silero_model is None:
             logger.info("Using energy-based VAD fallback")
 
@@ -110,6 +112,10 @@ class VoiceActivityDetector:
                 logger.debug("WebRTC VAD frame error: %s", exc)
         probability = speech_frames / max(len(frames), 1)
         has_speech = probability >= self.threshold
+        logger.debug(
+            "WebRTC VAD completed",
+            extra={"frames": len(frames), "probability": probability, "threshold": self.threshold},
+        )
         return VadResult(has_speech=has_speech, probability=probability, backend=self.backend_name)
 
     def _detect_with_silero(self, audio: np.ndarray, sample_rate: int) -> VadResult:
@@ -118,6 +124,10 @@ class VoiceActivityDetector:
         with torch.no_grad():  # type: ignore[attr-defined]
             prob = float(self._silero_model(tensor, sample_rate).item())  # type: ignore[operator]
         has_speech = prob >= self.threshold
+        logger.debug(
+            "Silero VAD completed",
+            extra={"probability": prob, "threshold": self.threshold},
+        )
         return VadResult(has_speech=has_speech, probability=prob, backend=self.backend_name)
 
     def _detect_with_energy(self, audio: np.ndarray) -> VadResult:
@@ -125,6 +135,10 @@ class VoiceActivityDetector:
         reference = 0.03
         probability = float(np.clip(rms / reference, 0.0, 1.0))
         has_speech = probability >= self.threshold
+        logger.debug(
+            "Energy VAD completed",
+            extra={"probability": probability, "threshold": self.threshold},
+        )
         return VadResult(has_speech=has_speech, probability=probability, backend=self.backend_name)
 
     @staticmethod

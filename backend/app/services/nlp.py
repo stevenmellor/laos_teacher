@@ -1,11 +1,13 @@
 """Lao-specific NLP helpers."""
 from __future__ import annotations
 
-import logging
 from dataclasses import dataclass
 from typing import List
 
-logger = logging.getLogger(__name__)
+from ..logging_utils import get_logger
+
+logger = get_logger(__name__)
+logger.debug("NLP service module loaded")
 
 try:  # pragma: no cover - optional dependency
     from laonlp import LaoTokenizer  # type: ignore
@@ -39,9 +41,12 @@ class LaoTextProcessor:
         self._tokenizer = LaoTokenizer() if _LAONLP_AVAILABLE else None
         if self._tokenizer is None:
             logger.info("LaoTokenizer unavailable; using simple character segmentation")
+        else:
+            logger.info("LaoTokenizer initialised")
 
     def segment(self, text: str) -> SegmentedText:
         if not text:
+            logger.debug("Segmentation requested for empty text")
             return SegmentedText(tokens=[], romanised="")
         if self._tokenizer is not None:
             tokens = self._tokenizer.tokenize(text)
@@ -49,6 +54,10 @@ class LaoTextProcessor:
             tokens = list(text)
         romanised_tokens = [self._romanise_token(tok) for tok in tokens]
         romanised = " ".join(filter(None, romanised_tokens))
+        logger.debug(
+            "Segmentation complete",
+            extra={"token_count": len(tokens), "romanised": romanised},
+        )
         return SegmentedText(tokens=tokens, romanised=romanised)
 
     def _romanise_token(self, token: str) -> str:

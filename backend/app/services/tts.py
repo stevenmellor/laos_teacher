@@ -2,15 +2,16 @@
 from __future__ import annotations
 
 import base64
-import logging
 from dataclasses import dataclass
 from typing import Optional
 
 import numpy as np
 
 from ..config import get_settings
+from ..logging_utils import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
+logger.debug("TTS service module loaded")
 
 try:  # pragma: no cover - optional dependency
     from transformers import AutoTokenizer, VitsModel  # type: ignore
@@ -61,9 +62,15 @@ class TtsService:
                 self._torch_device = self._resolve_device()
                 if self._torch_device:
                     self._model = self._model.to(self._torch_device)
-                logger.info("Loaded TTS model %s on %s", self.model_name, self._torch_device or "cpu")
+                logger.info(
+                    "Loaded TTS model",
+                    extra={
+                        "model": self.model_name,
+                        "device": str(self._torch_device or "cpu"),
+                    },
+                )
             except Exception as exc:  # pragma: no cover - best-effort load
-                logger.warning("Could not load TTS model: %s", exc)
+                logger.warning("Could not load TTS model", exc_info=exc)
         else:
             logger.warning("Transformers or torch unavailable; TTS will emit placeholders")
 
@@ -81,7 +88,7 @@ class TtsService:
 
     def synthesize(self, text: str) -> Optional[TtsResult]:
         if not self.is_ready:
-            logger.debug("Returning placeholder TTS for text: %s", text)
+            logger.debug("Returning placeholder TTS", extra={"text": text})
             return None
         inputs = self._tokenizer(text, return_tensors="pt")  # type: ignore[operator]
         if self._torch_device:
@@ -91,6 +98,10 @@ class TtsService:
         audio = waveform.squeeze().detach().cpu().numpy().astype(np.float32)
         audio_base64 = base64.b64encode(audio.tobytes()).decode("utf-8")
         sample_rate = int(getattr(self._model.config, "sampling_rate", 16000))  # type: ignore[union-attr]
+        logger.debug(
+            "Synthesised speech",
+            extra={"text_length": len(text), "sample_rate": sample_rate},
+        )
         return TtsResult(audio_base64=audio_base64, sample_rate=sample_rate)
 
 

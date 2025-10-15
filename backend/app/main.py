@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import base64
-import logging
 from typing import Any, Optional
 
 import numpy as np
@@ -11,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 
 from .config import get_settings
+from .logging_utils import configure_logging, get_logger
 from .models.schemas import (
     ChatMessage,
     ConversationRequest,
@@ -23,13 +23,22 @@ from .models.schemas import (
 from .services.tutor import TutorEngine
 from .services.llm import ConversationService
 
-logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO)
-
 app = FastAPI(title="Lao Tutor API")
 settings = get_settings()
+configure_logging(settings.log_dir)
+logger = get_logger(__name__)
+logger.info("Application initialised", extra={"log_dir": str(settings.log_dir)})
+
 tutor_engine = TutorEngine()
 conversation_service = ConversationService(tutor_engine.export_phrase_banks())
+logger.info(
+    "Tutor services ready",
+    extra={
+        "vad": tutor_engine.vad.backend_name,
+        "tts_ready": tutor_engine.tts.is_ready,
+        "llm_ready": conversation_service.is_ready,
+    },
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -44,6 +53,7 @@ app.add_middleware(
 def index(request: Request) -> Response:
     """Landing endpoint that serves HTML by default with a JSON fallback."""
     accept_header = (request.headers.get("accept") or "").lower()
+    logger.debug("Serving index", extra={"accept": accept_header})
     payload = {
         "service": "lao-tutor",
         "message": "Use /api/v1/utterance for audio interactions or /health for status",
@@ -797,6 +807,15 @@ def index(request: Request) -> Response:
 
 @app.get("/health", response_model=HealthResponse)
 def healthcheck() -> HealthResponse:
+    logger.info(
+        "Health check invoked",
+        extra={
+            "vad_backend": tutor_engine.vad.backend_name,
+            "asr_ready": tutor_engine.asr.is_ready,
+            "tts_ready": tutor_engine.tts.is_ready,
+            "llm_ready": conversation_service.is_ready,
+        },
+    )
     return HealthResponse(
         status="ok",
         whisper_loaded=tutor_engine.asr.is_ready,
@@ -810,21 +829,43 @@ def _decode_audio(audio_base64: str, expected_sample_rate: int) -> np.ndarray:
     try:
         audio_bytes = base64.b64decode(audio_base64)
     except Exception as exc:
+        logger.warning("Invalid audio payload", exc_info=exc)
         raise HTTPException(status_code=400, detail=f"Invalid base64 audio: {exc}") from exc
     if len(audio_bytes) % 2 == 0:
         audio = np.frombuffer(audio_bytes, dtype=np.int16).astype(np.float32) / 32768.0
     else:
         audio = np.frombuffer(audio_bytes, dtype=np.float32)
     if audio.size == 0:
+        logger.warning("Empty audio payload received")
         raise HTTPException(status_code=400, detail="Empty audio payload")
+    logger.debug(
+        "Decoded audio payload",
+        extra={"frames": int(audio.size), "expected_sample_rate": expected_sample_rate},
+    )
     return audio
 
 
 @app.post("/api/v1/utterance", response_model=UtteranceResponse)
 def handle_utterance(payload: UtteranceRequest) -> UtteranceResponse:
     sample_rate = payload.sample_rate or settings.sample_rate
+    logger.info(
+        "Processing utterance",
+        extra={
+            "sample_rate": sample_rate,
+            "task_id": payload.task_id,
+            "has_audio": bool(payload.audio_base64),
+        },
+    )
     audio = _decode_audio(payload.audio_base64, sample_rate)
     feedback: SegmentFeedback = tutor_engine.process_audio(audio, sample_rate, payload.task_id)
+    logger.debug(
+        "Utterance processed",
+        extra={
+            "heard_text": feedback.lao_text,
+            "romanised": feedback.romanised,
+            "corrections": len(feedback.corrections or []),
+        },
+    )
     tts_result = tutor_engine.prepare_teacher_audio(feedback)
     teacher_audio_base64 = tts_result.audio_base64 if tts_result else None
     teacher_audio_sample_rate = tts_result.sample_rate if tts_result else None
@@ -852,6 +893,15 @@ def handle_conversation(payload: ConversationRequest) -> ConversationResponse:
 
     message_text = payload.message.strip() if payload.message else ""
 
+    logger.info(
+        "Conversation turn received",
+        extra={
+            "history_count": len(history_payload),
+            "has_audio": bool(payload.audio_base64),
+            "task_id": payload.task_id,
+        },
+    )
+
     if payload.audio_base64:
         audio = _decode_audio(payload.audio_base64, sample_rate)
         utterance_feedback = tutor_engine.process_audio(audio, sample_rate, payload.task_id)
@@ -867,6 +917,7 @@ def handle_conversation(payload: ConversationRequest) -> ConversationResponse:
     try:
         result = conversation_service.generate(history_payload, message_text, payload.task_id)
     except ValueError as exc:
+        logger.error("Conversation generation failed", exc_info=exc)
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     tts_result = None
@@ -878,6 +929,16 @@ def handle_conversation(payload: ConversationRequest) -> ConversationResponse:
 
     response_history = [ChatMessage(**entry) for entry in result.history]
     reply_message = ChatMessage(role="assistant", content=result.reply_text)
+
+    logger.debug(
+        "Conversation turn processed",
+        extra={
+            "reply_chars": len(result.reply_text),
+            "heard_text": heard_text,
+            "spoken_text": spoken_text,
+            "teacher_audio": bool(tts_result),
+        },
+    )
 
     debug_payload: dict[str, Any] = dict(result.debug)
     if payload.audio_base64:

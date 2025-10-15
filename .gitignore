@@ -2,5 +2,7 @@ __pycache__/
 *.py[cod]
 .venv/
 .env
-models/
-data/
+/models/
+/data/
+logs/*.log
+logs/*.log.*

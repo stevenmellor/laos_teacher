@@ -2,14 +2,15 @@
 from __future__ import annotations
 
 import datetime as dt
-import logging
+import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Optional
 
-import sqlite3
+from ..logging_utils import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
+logger.debug("SRS service module loaded")
 
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS cards (
@@ -48,15 +49,17 @@ class SrsRepository:
     def __init__(self, db_path: Path) -> None:
         self.db_path = db_path
         self._ensure_schema()
+        logger.info("SRS repository initialised", extra={"db_path": str(self.db_path)})
 
     def _connect(self) -> sqlite3.Connection:
+        logger.debug("Opening SQLite connection", extra={"db_path": str(self.db_path)})
         return sqlite3.connect(self.db_path)
 
     def _ensure_schema(self) -> None:
         with self._connect() as conn:
             conn.executescript(SCHEMA_SQL)
             conn.commit()
-        logger.debug("Ensured SRS schema at %s", self.db_path)
+        logger.debug("Ensured SRS schema", extra={"db_path": str(self.db_path)})
 
     def upsert_card(
         self,
@@ -82,6 +85,10 @@ class SrsRepository:
                 (card_id, lao_text, romanised, translation, level, tag),
             )
             conn.commit()
+        logger.info(
+            "Card upserted",
+            extra={"card_id": card_id, "level": level, "tag": tag},
+        )
 
     def log_review(self, card_id: str, ease: float, prev_interval: Optional[int] = None) -> ReviewLog:
         now = dt.datetime.utcnow()
@@ -98,7 +105,10 @@ class SrsRepository:
                 (card_id, now.isoformat(), ease, interval, next_due.isoformat()),
             )
             conn.commit()
-        logger.debug("Logged review for %s with interval %s", card_id, interval)
+        logger.info(
+            "Review logged",
+            extra={"card_id": card_id, "interval": interval, "ease": ease},
+        )
         return ReviewLog(card_id=card_id, reviewed_at=now, ease=ease, interval=interval, next_due=next_due)
 
     def due_cards(self, limit: int = 10) -> Iterable[str]:
@@ -114,7 +124,9 @@ class SrsRepository:
                 (today, limit),
             )
             rows = cursor.fetchall()
-        return [row[0] for row in rows]
+        due_list = [row[0] for row in rows]
+        logger.debug("Fetched due cards", extra={"count": len(due_list), "limit": limit})
+        return due_list
 
 
 __all__ = ["SrsRepository", "ReviewLog"]

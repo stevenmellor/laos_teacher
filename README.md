@@ -12,6 +12,7 @@ This repository contains an experimental, local-first Lao (ລາວ) language t
 - Lao segmentation and romanisation helper with LaoNLP integration when installed
 - Meta MMS-based Lao TTS interface (defaulting to `facebook/mms-tts-lao`) with graceful fallback behaviour
 - SQLite-backed spaced repetition (SM-2 style) store to track learner progress
+- Centralised logging with rotating file handlers writing to `logs/app.log`
 
 ## Getting started
 
@@ -66,6 +67,12 @@ This repository contains an experimental, local-first Lao (ລາວ) language t
 5. Chat with the tutor over text and generated Lao speech via `/api/v1/conversation` or by using the interactive widget on the root page. Each tutor reply now includes an inline audio player and "spoken reply" snippet so you can immediately listen back or replay the teacher.
 
 Environment variables such as `LAO_TUTOR_TTS_MODEL_NAME` and `LAO_TUTOR_TTS_DEVICE` can be used to switch voices or target a GPU/MPS runtime for faster synthesis.
+
+## Logging
+
+- The backend configures structured logging on import and writes rotating files to `logs/app.log` (ignored by git).
+- Each module obtains a named logger via `backend.app.logging_utils.get_logger` and emits contextual metadata (e.g., ASR results, VAD backend, conversation turn stats).
+- Update `LAO_TUTOR_LOG_DIR` (or call `configure_logging` manually) if you want to stream logs to a custom directory for deployment.
 
 ## Tests
 
