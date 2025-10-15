@@ -1,8 +1,9 @@
 """Lao-specific NLP helpers."""
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
-from typing import List
+from typing import List, Optional
 
 from ..logging_utils import get_logger
 
@@ -13,6 +14,27 @@ logger.debug("NLP service module loaded")
 def contains_lao_characters(text: str) -> bool:
     """Return True if the string includes Lao script characters."""
     return any("\u0E80" <= char <= "\u0EFF" for char in text)
+
+
+_LAO_RUN = re.compile(r"[\u0E80-\u0EFF]+")
+
+
+def extract_first_lao_segment(text: str) -> Optional[str]:
+    """Extract the first contiguous Lao substring from *text* if present."""
+
+    if not text:
+        logger.debug("extract_first_lao_segment received empty text")
+        return None
+    match = _LAO_RUN.search(text)
+    if match:
+        segment = match.group(0)
+        logger.debug(
+            "extract_first_lao_segment located substring",
+            extra={"segment": segment, "length": len(segment)},
+        )
+        return segment
+    logger.debug("extract_first_lao_segment found no Lao substring")
+    return None
 
 try:  # pragma: no cover - optional dependency
     from laonlp import LaoTokenizer  # type: ignore
@@ -70,4 +92,9 @@ class LaoTextProcessor:
         return "".join(roman_chars)
 
 
-__all__ = ["LaoTextProcessor", "SegmentedText", "contains_lao_characters"]
+__all__ = [
+    "LaoTextProcessor",
+    "SegmentedText",
+    "contains_lao_characters",
+    "extract_first_lao_segment",
+]

@@ -12,7 +12,7 @@ from ..config import get_settings
 from ..logging_utils import get_logger
 from ..models.schemas import SegmentFeedback
 from .asr import AsrService
-from .nlp import LaoTextProcessor, contains_lao_characters
+from .nlp import LaoTextProcessor, contains_lao_characters, extract_first_lao_segment
 from .srs import SrsRepository
 from .tts import TtsResult, TtsService
 from .translation import TranslationService
@@ -58,6 +58,10 @@ class TutorEngine:
                 "ຈົ່ງພູດຊ້າ": "Please speak slowly",
                 "ທ່ານສະບາຍດີບໍ?": "How are you?",
                 "ຂ້ອຍສຸກສະບາຍ": "I'm doing well",
+                "ສະບາຍດີຕອນເຊົ້າ": "Good morning",
+                "ສະບາຍດີຕອນແລງ": "Good evening",
+                "ຂໍໂທດ": "Sorry",
+                "ບໍ່ເປັນຫຍັງ": "You're welcome",
             },
             "numbers_0_10": {
                 "ສູນ": "0",
@@ -164,8 +168,9 @@ class TutorEngine:
                 if translation_result.direction == "lo->en":
                     translation = translation_result.text
                 else:
-                    if contains_lao_characters(translation_result.text):
-                        focus_from_translation = translation_result.text
+                    lao_focus = extract_first_lao_segment(translation_result.text)
+                    if lao_focus:
+                        focus_from_translation = lao_focus
                     else:
                         logger.debug(
                             "Reverse translation produced non-Lao text",

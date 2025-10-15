@@ -8,7 +8,7 @@ from typing import Dict, List, Optional
 from ..config import get_settings
 from ..logging_utils import get_logger
 from ..models.schemas import SegmentFeedback
-from .nlp import LaoTextProcessor, contains_lao_characters
+from .nlp import LaoTextProcessor, contains_lao_characters, extract_first_lao_segment
 
 logger = get_logger(__name__)
 logger.debug("Conversation service module loaded")
@@ -238,14 +238,16 @@ class ConversationService:
 
         focus_phrase, focus_translation = self._select_focus_phrase(task_id)
 
-        if observation and observation.lao_text:
-            focus_phrase = observation.lao_text
-            if observation.translation:
-                focus_translation = observation.translation
         if observation and observation.focus_phrase:
             focus_phrase = observation.focus_phrase
             if observation.focus_translation:
                 focus_translation = observation.focus_translation
+            elif observation.translation:
+                focus_translation = observation.translation
+        elif observation and observation.lao_text and contains_lao_characters(observation.lao_text):
+            focus_phrase = observation.lao_text
+            if observation.translation:
+                focus_translation = observation.translation
 
         logger.info(
             "Generating tutor response",
@@ -303,7 +305,9 @@ class ConversationService:
         if not spoken_text:
             spoken_text = self._extract_lao_line(reply)
         if not spoken_text:
-            spoken_text = focus_phrase or None
+            spoken_text = extract_first_lao_segment(focus_phrase or "") or focus_phrase or None
+        if spoken_text and not contains_lao_characters(spoken_text) and focus_phrase and contains_lao_characters(focus_phrase):
+            spoken_text = focus_phrase
 
         updated_history = history[-8:].copy()
         updated_history.append({"role": "user", "content": user_message})

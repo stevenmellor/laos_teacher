@@ -99,6 +99,31 @@ def test_conversation_maps_composite_english_phrase(monkeypatch: pytest.MonkeyPa
     assert "Let's practise" in payload["reply"]["content"]
 
 
+def test_conversation_extracts_lao_from_translation(monkeypatch: pytest.MonkeyPatch):
+    """When translation returns mixed output, the Lao substring becomes the focus phrase."""
+
+    from backend.app.services.translation import TranslationResult
+
+    logger.info("Running translation Lao extraction test")
+    client = TestClient(app)
+
+    def fake_translate(_: str) -> TranslationResult:
+        return TranslationResult(text="ສະບາຍດີ, hello there", backend="stub", direction="en->lo")
+
+    monkeypatch.setattr(main_module.tutor_engine.translator, "translate", fake_translate)
+
+    response = client.post(
+        "/api/v1/conversation",
+        json={"message": "Greetings", "history": []},
+    )
+    assert response.status_code == 200
+    payload = response.json()
+
+    assert payload["focus_phrase"].startswith("ສະບາຍດີ")
+    assert payload["spoken_text"].startswith("ສະບາຍດີ")
+    assert any("\u0E80" <= ch <= "\u0EFF" for ch in payload["spoken_text"])
+
+
 def test_conversation_rejects_empty_payload():
     logger.info("Running conversation validation test")
     client = TestClient(app)
