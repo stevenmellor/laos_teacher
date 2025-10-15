@@ -28,6 +28,15 @@ class SegmentFeedback(BaseModel):
     corrections: List[str] = Field(default_factory=list, description="List of correction hints")
     praise: Optional[str] = Field(None, description="Positive reinforcement message")
     review_card_ids: List[str] = Field(default_factory=list, description="Related spaced-repetition card IDs")
+    focus_phrase: Optional[str] = Field(
+        default=None, description="Preferred Lao phrase to practise in the next turn"
+    )
+    focus_translation: Optional[str] = Field(
+        default=None, description="English gloss for the focus phrase"
+    )
+    focus_romanised: Optional[str] = Field(
+        default=None, description="Romanised form of the focus phrase"
+    )
 
 
 class UtteranceResponse(BaseModel):

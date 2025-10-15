@@ -60,11 +60,14 @@ def test_conversation_endpoint_returns_reply():
     assert payload["reply"]["role"] == "assistant"
     assert payload["reply"]["content"]
     assert "Let's practise" in payload["reply"]["content"]
+    assert "Hello" in payload["reply"]["content"]
     assert isinstance(payload["history"], list)
     assert payload["history"], "History should include the new turn"
     assert "heard_text" in payload
     assert "spoken_text" in payload
     assert payload["utterance_feedback"] is None
+    assert payload["focus_phrase"]
+    assert payload["focus_translation"]
 
 
 def test_conversation_rejects_empty_payload():
@@ -132,4 +135,5 @@ def test_conversation_audio_roundtrip_includes_teacher_audio(monkeypatch: pytest
     assert data["teacher_audio_base64"] == fake_teacher_audio
     assert data["teacher_audio_sample_rate"] == 16000
     assert data["utterance_feedback"] is not None
+    assert data["utterance_feedback"]["focus_phrase"] == "ທົດລອງ"
     assert "I heard you say" in data["reply"]["content"]

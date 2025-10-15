@@ -6,6 +6,7 @@ from typing import Optional
 
 from ..config import get_settings
 from ..logging_utils import get_logger
+from .nlp import contains_lao_characters
 
 logger = get_logger(__name__)
 logger.debug("Translation service module loaded")
@@ -86,6 +87,12 @@ class TranslationService:
         if not text:
             logger.debug("Translation requested for empty text")
             return None
+        if not contains_lao_characters(text):
+            logger.debug(
+                "Translation passthrough for non-Lao text",
+                extra={"text": text},
+            )
+            return TranslationResult(text=text, backend="passthrough")
         if self._translator is None:
             logger.debug("Translation skipped; backend not initialised")
             return None

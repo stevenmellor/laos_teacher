@@ -9,6 +9,11 @@ from ..logging_utils import get_logger
 logger = get_logger(__name__)
 logger.debug("NLP service module loaded")
 
+
+def contains_lao_characters(text: str) -> bool:
+    """Return True if the string includes Lao script characters."""
+    return any("\u0E80" <= char <= "\u0EFF" for char in text)
+
 try:  # pragma: no cover - optional dependency
     from laonlp import LaoTokenizer  # type: ignore
 
@@ -65,4 +70,4 @@ class LaoTextProcessor:
         return "".join(roman_chars)
 
 
-__all__ = ["LaoTextProcessor", "SegmentedText"]
+__all__ = ["LaoTextProcessor", "SegmentedText", "contains_lao_characters"]

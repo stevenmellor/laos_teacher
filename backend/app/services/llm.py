@@ -7,7 +7,7 @@ from typing import Dict, List, Optional
 from ..config import get_settings
 from ..logging_utils import get_logger
 from ..models.schemas import SegmentFeedback
-from .nlp import LaoTextProcessor
+from .nlp import LaoTextProcessor, contains_lao_characters
 
 logger = get_logger(__name__)
 logger.debug("Conversation service module loaded")
@@ -130,16 +130,23 @@ class ConversationService:
         if observation and observation.lao_text:
             observed_translation = observation.translation or "We'll learn this meaning together."
             observed_romanised = observation.romanised or self._romanise(observation.lao_text)
-            romanised_note = f" ({observed_romanised})" if observed_romanised else ""
-            lines.append(
-                f"I heard you say \"{observation.lao_text}\"{romanised_note}. In English, that means \"{observed_translation}\"."
-            )
+            if contains_lao_characters(observation.lao_text):
+                romanised_note = f" ({observed_romanised})" if observed_romanised else ""
+                lines.append(
+                    f"I heard you say \"{observation.lao_text}\"{romanised_note}. In English, that means \"{observed_translation}\"."
+                )
+            else:
+                lines.append(
+                    f"I heard you say \"{observation.lao_text}\" in English. Let's express that in Lao together."
+                )
             if not focus_phrase:
-                focus_phrase = observation.lao_text
-                focus_translation = observation.translation or focus_translation
+                focus_phrase = observation.focus_phrase or observation.lao_text
+                focus_translation = observation.focus_translation or observation.translation or focus_translation
 
         if focus_phrase:
-            focus_romanised = self._romanise(focus_phrase)
+            focus_romanised = observation.focus_romanised if observation else None
+            if not focus_romanised:
+                focus_romanised = self._romanise(focus_phrase)
             romanised_note = f" ({focus_romanised})" if focus_romanised else ""
             english_gloss = focus_translation or "our target phrase today."
             lines.append(
@@ -212,6 +219,10 @@ class ConversationService:
             focus_phrase = observation.lao_text
             if observation.translation:
                 focus_translation = observation.translation
+        if observation and observation.focus_phrase:
+            focus_phrase = observation.focus_phrase
+            if observation.focus_translation:
+                focus_translation = observation.focus_translation
 
         logger.info(
             "Generating tutor response",

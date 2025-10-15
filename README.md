@@ -14,6 +14,8 @@ This repository contains an experimental, local-first Lao (ລາວ) language t
 - SQLite-backed spaced repetition (SM-2 style) store to track learner progress
 - Centralised logging with rotating file handlers writing to `logs/app.log`
 - Optional Lao→English translation via Hugging Face NLLB so every tutor reply pairs Lao script with an English gloss
+- English-first teaching loop that maps recognised English phrases to Lao focus sentences with romanisation so learners always
+  know what they are hearing and why it matters
 
 ## Getting started
 
@@ -76,7 +78,7 @@ This repository contains an experimental, local-first Lao (ລາວ) language t
 
 4. Alternatively, send base64-encoded PCM audio to `/api/v1/utterance` programmatically for the same feedback pipeline.
 
-5. Chat with the tutor over text and generated Lao speech via `/api/v1/conversation` or by using the interactive widget on the root page. Each tutor reply now includes an inline audio player and "spoken reply" snippet so you can immediately listen back or replay the teacher.
+5. Chat with the tutor over text and generated Lao speech via `/api/v1/conversation` or by using the interactive widget on the root page. Each tutor reply now includes an inline audio player and "spoken reply" snippet so you can immediately listen back or replay the teacher. When you speak English, the tutor will surface the matching Lao phrase, its romanisation, and an English gloss so you can bridge both languages.
 
 6. If the tutor responds with *"ລະບົບກຳລັງຕຽມການຮັບຟັງ – The speech recogniser is still preparing"*, keep the server running while Whisper downloads into `LAO_TUTOR_MODEL_DIR`. Install the speech extras if you have not already:
 

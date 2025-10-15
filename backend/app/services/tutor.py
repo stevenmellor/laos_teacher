@@ -10,7 +10,7 @@ from ..config import get_settings
 from ..logging_utils import get_logger
 from ..models.schemas import SegmentFeedback
 from .asr import AsrService
-from .nlp import LaoTextProcessor
+from .nlp import LaoTextProcessor, contains_lao_characters
 from .srs import SrsRepository
 from .tts import TtsResult, TtsService
 from .translation import TranslationService
@@ -64,6 +64,22 @@ class TutorEngine:
         logger.debug("Phrase bank loaded", extra={"tasks": list(bank.keys())})
         return bank
 
+    def _find_phrase_by_translation(self, text: str) -> tuple[Optional[str], Optional[str]]:
+        if not text:
+            return None, None
+        normalized = text.strip().lower()
+        if not normalized:
+            return None, None
+        for task, phrases in self._phrase_bank.items():
+            for phrase, translation in phrases.items():
+                if translation and translation.strip().lower() == normalized:
+                    logger.debug(
+                        "Matched English phrase to Lao target",
+                        extra={"task": task, "phrase": phrase, "translation": translation},
+                    )
+                    return phrase, translation
+        return None, None
+
     def process_audio(self, audio: np.ndarray, sample_rate: int, task_id: Optional[str] = None) -> SegmentFeedback:
         if task_id:
             self.state.current_task = task_id
@@ -115,23 +131,68 @@ class TutorEngine:
 
         corrections: List[str] = []
         praise: Optional[str] = None
+        focus_phrase: Optional[str] = None
+        focus_translation: Optional[str] = None
+        focus_romanised: Optional[str] = None
+
         if not asr_result.text:
             corrections.append("ຂໍໃຫ້ເວົ້າອີກຄັ້ງ – Try repeating the target phrase.")
-        elif translation is None:
-            hint = "Let's focus on today's target phrase. Repeat after me."
-            if not self.translator.is_ready:
-                hint += (
-                    " Our translation model is still downloading – run `uv pip install '.[llm]'` "
-                    "and allow the NLLB weights to finish syncing."
-                )
-            corrections.append(hint)
         else:
-            praise = "ດີຫຼາຍ! Great job!"
-            self.srs.log_review(card_id=asr_result.text, ease=1.0)
-            logger.info(
-                "Learner phrase recognised",
-                extra={"text": asr_result.text, "task": self.state.current_task},
-            )
+            if contains_lao_characters(asr_result.text):
+                focus_phrase = asr_result.text
+                focus_translation = translation
+                focus_romanised = segmented.romanised
+            else:
+                matched_phrase, matched_translation = self._find_phrase_by_translation(asr_result.text)
+                if matched_phrase:
+                    focus_phrase = matched_phrase
+                    focus_translation = matched_translation or translation or asr_result.text
+                    focus_romanised = self.text_processor.segment(matched_phrase).romanised
+                    corrections.append(
+                        (
+                            f"Let's learn to say '{focus_translation}' in Lao: {matched_phrase}"
+                            f" ({focus_romanised})."
+                        )
+                    )
+                    translation = focus_translation
+                elif translation:
+                    corrections.append(
+                        f"We'll map your English phrase to Lao together. Try saying the Lao for '{translation}'."
+                    )
+                else:
+                    corrections.append(
+                        "I heard English audio. Let's try speaking the Lao phrase slowly together."
+                    )
+
+            if translation is None:
+                hint = "Let's focus on today's target phrase. Repeat after me."
+                if not self.translator.is_ready:
+                    hint += (
+                        " Our translation model is still downloading – run `uv pip install '.[llm]'` "
+                        "and allow the NLLB weights to finish syncing."
+                    )
+                corrections.append(hint)
+            else:
+                praise = "ດີຫຼາຍ! Great job!"
+                card_id = focus_phrase or asr_result.text
+                self.srs.log_review(card_id=card_id, ease=1.0)
+                logger.info(
+                    "Learner phrase recognised",
+                    extra={
+                        "text": asr_result.text,
+                        "card_id": card_id,
+                        "task": self.state.current_task,
+                    },
+                )
+
+        if focus_phrase and not focus_romanised:
+            focus_romanised = self.text_processor.segment(focus_phrase).romanised
+
+        review_ids: List[str] = []
+        if focus_phrase:
+            review_ids.append(focus_phrase)
+        elif translation:
+            review_ids.append(asr_result.text)
 
         return SegmentFeedback(
             lao_text=asr_result.text,
@@ -139,7 +200,10 @@ class TutorEngine:
             translation=translation,
             corrections=corrections,
             praise=praise,
-            review_card_ids=[asr_result.text] if translation else [],
+            review_card_ids=review_ids,
+            focus_phrase=focus_phrase,
+            focus_translation=focus_translation or translation,
+            focus_romanised=focus_romanised,
         )
 
     def dependency_status(self) -> Dict[str, bool]:
@@ -155,7 +219,11 @@ class TutorEngine:
         *,
         text_override: Optional[str] = None,
     ) -> Optional[TtsResult]:
-        text = text_override or (feedback.lao_text if feedback else "")
+        text = text_override or (
+            feedback.focus_phrase
+            if feedback and feedback.focus_phrase
+            else (feedback.lao_text if feedback else "")
+        )
         if not text:
             bank = self._phrase_bank.get(self.state.current_task, {})
             text = next(iter(bank.keys()), "")
