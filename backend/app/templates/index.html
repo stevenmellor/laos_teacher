@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Lao Tutor API</title>
+    <link rel="stylesheet" href="/static/css/styles.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>Lao Tutor API</h1>
+        <p class="lead">Voice-first Lao language teaching backend.</p>
+      </header>
+
+      <section aria-labelledby="section-chat" class="chat-section">
+        <h2 id="section-chat">Try the conversational tutor</h2>
+        <div class="chat-card">
+          <div
+            id="chat-log"
+            class="chat-log"
+            aria-live="polite"
+            aria-label="Tutor conversation"
+          ></div>
+          <form id="chat-form" class="chat-form">
+            <label for="chat-input" class="sr-only">Your message</label>
+            <textarea
+              id="chat-input"
+              name="message"
+              rows="3"
+              placeholder="Type in English or Lao..."
+            ></textarea>
+            <div class="chat-actions">
+              <div class="chat-buttons">
+                <button id="chat-record" type="button" class="secondary">
+                  🎙️ Record phrase
+                </button>
+                <button id="chat-send" type="submit">Send</button>
+              </div>
+              <span id="chat-status" class="chat-status"></span>
+            </div>
+          </form>
+        </div>
+      </section>
+
+      <section aria-labelledby="section-try">
+        <h2 id="section-try">Try it out</h2>
+        <div class="cta-grid">
+          <article class="card">
+            <h3>Health check</h3>
+            <p>Confirm model availability and backend health.</p>
+            <code>/health</code>
+          </article>
+          <article class="card">
+            <h3>Send audio</h3>
+            <p>
+              Record a phrase above or POST base64-encoded 16&nbsp;kHz PCM for
+              analysis.
+            </p>
+            <code>/api/v1/utterance</code>
+          </article>
+          <article class="card">
+            <h3>Interactive docs</h3>
+            <p>Explore request/response schemas and run sample calls.</p>
+            <a href="/docs">Swagger UI</a>
+          </article>
+        </div>
+      </section>
+
+      <section aria-labelledby="section-quickstart">
+        <h2 id="section-quickstart">Quickstart</h2>
+        <ol>
+          <li>
+            Click <strong>🎙️ Record phrase</strong> above to capture a Lao
+            utterance or POST a base64 clip to <code>/api/v1/utterance</code>.
+          </li>
+          <li>
+            Review the recognised Lao, romanisation, and corrections, then
+            listen back to the teacher audio.
+          </li>
+          <li>
+            Poll <code>/health</code> to verify ASR/TTS/LLM availability before
+            integrating a client.
+          </li>
+        </ol>
+      </section>
+
+      <footer>
+        Prefer JSON? Send <code>Accept: application/json</code> with your
+        request.
+      </footer>
+    </main>
+    <script src="/static/js/app.js" type="module"></script>
+  </body>
+</html>
