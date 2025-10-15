@@ -155,9 +155,7 @@ def handle_utterance(payload: UtteranceRequest) -> UtteranceResponse:
     debug_info: dict[str, Any] = {
         "task": tutor_engine.state.current_task,
         "vad_backend": tutor_engine.vad.backend_name,
-        "asr_ready": tutor_engine.asr.is_ready,
-        "tts_ready": tutor_engine.tts.is_ready,
-        "translation_ready": tutor_engine.translator.is_ready,
+        **tutor_engine.dependency_status(),
     }
     return UtteranceResponse(
         feedback=feedback,
@@ -198,6 +196,8 @@ def handle_conversation(payload: ConversationRequest) -> ConversationResponse:
     if not message_text.strip():
         message_text = "I could not speak clearly."
 
+    dependency_status = tutor_engine.dependency_status()
+
     try:
         result = conversation_service.generate(
             history_payload,
@@ -229,15 +229,13 @@ def handle_conversation(payload: ConversationRequest) -> ConversationResponse:
         },
     )
 
-    debug_payload: dict[str, Any] = dict(result.debug)
+    debug_payload: dict[str, Any] = {**result.debug, **dependency_status}
     if payload.audio_base64:
         debug_payload.update(
             {
                 "audio_processed": True,
                 "sample_rate": sample_rate,
                 "vad_backend": tutor_engine.vad.backend_name,
-                "asr_ready": tutor_engine.asr.is_ready,
-                "translation_ready": tutor_engine.translator.is_ready,
             }
         )
     else:

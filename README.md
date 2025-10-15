@@ -78,6 +78,14 @@ This repository contains an experimental, local-first Lao (ລາວ) language t
 
 5. Chat with the tutor over text and generated Lao speech via `/api/v1/conversation` or by using the interactive widget on the root page. Each tutor reply now includes an inline audio player and "spoken reply" snippet so you can immediately listen back or replay the teacher.
 
+6. If the tutor responds with *"ລະບົບກຳລັງຕຽມການຮັບຟັງ – The speech recogniser is still preparing"*, keep the server running while Whisper downloads into `LAO_TUTOR_MODEL_DIR`. Install the speech extras if you have not already:
+
+   ```bash
+   uv pip install '.[speech]'
+   ```
+
+   Likewise, a hint about the translation model indicates you should install the LLM extras (`uv pip install '.[llm]'`) so the NLLB weights can sync. Progress is logged in `logs/app.log` and echoed to stdout.
+
 ### Environment configuration
 
 All runtime settings can be provided through environment variables (prefixed with `LAO_TUTOR_`) or a `.env` file. The table below lists the available options and their defaults.

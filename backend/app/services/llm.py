@@ -119,6 +119,14 @@ class ConversationService:
         focus_translation: Optional[str],
     ) -> str:
         lines: List[str] = []
+        if observation and observation.corrections:
+            for hint in observation.corrections:
+                if "speech recogniser" in hint.lower():
+                    lines.append(
+                        "I'm still downloading the speech models so I might miss what you say. Keep the server running and I'll start listening as soon as Whisper finishes syncing."
+                    )
+                    break
+
         if observation and observation.lao_text:
             observed_translation = observation.translation or "We'll learn this meaning together."
             observed_romanised = observation.romanised or self._romanise(observation.lao_text)

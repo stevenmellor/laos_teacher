@@ -68,6 +68,21 @@ class TutorEngine:
         if task_id:
             self.state.current_task = task_id
             logger.debug("Task updated", extra={"task_id": task_id})
+        if not self.asr.is_ready:
+            logger.error(
+                "ASR backend unavailable", extra={"task": self.state.current_task}
+            )
+            return SegmentFeedback(
+                lao_text="",
+                romanised="",
+                translation=None,
+                corrections=[
+                    "ລະບົບກຳລັງຕຽມການຮັບຟັງ – The speech recogniser is still preparing. "
+                    "Install the speech extras with `uv pip install '.[speech]'` and wait for the Whisper model download to finish.",
+                ],
+                praise=None,
+            )
+
         vad_result = self.vad.detect(audio, sample_rate)
         if not vad_result.has_speech:
             logger.debug(
@@ -103,7 +118,13 @@ class TutorEngine:
         if not asr_result.text:
             corrections.append("ຂໍໃຫ້ເວົ້າອີກຄັ້ງ – Try repeating the target phrase.")
         elif translation is None:
-            corrections.append("Let's focus on today's target phrase. Repeat after me.")
+            hint = "Let's focus on today's target phrase. Repeat after me."
+            if not self.translator.is_ready:
+                hint += (
+                    " Our translation model is still downloading – run `uv pip install '.[llm]'` "
+                    "and allow the NLLB weights to finish syncing."
+                )
+            corrections.append(hint)
         else:
             praise = "ດີຫຼາຍ! Great job!"
             self.srs.log_review(card_id=asr_result.text, ease=1.0)
@@ -120,6 +141,13 @@ class TutorEngine:
             praise=praise,
             review_card_ids=[asr_result.text] if translation else [],
         )
+
+    def dependency_status(self) -> Dict[str, bool]:
+        return {
+            "asr_ready": self.asr.is_ready,
+            "tts_ready": self.tts.is_ready,
+            "translation_ready": self.translator.is_ready,
+        }
 
     def prepare_teacher_audio(
         self,

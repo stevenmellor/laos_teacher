@@ -83,7 +83,12 @@ def test_conversation_accepts_audio_only():
         "sample_rate": 16000,
         "history": [],
     }
-    response = client.post("/api/v1/conversation", json=payload)
+    original_model = getattr(main_module.tutor_engine.asr, "_model", None)
+    main_module.tutor_engine.asr._model = object()
+    try:
+        response = client.post("/api/v1/conversation", json=payload)
+    finally:
+        main_module.tutor_engine.asr._model = original_model
     assert response.status_code == 200
     body = response.json()
     assert body["reply"]["role"] == "assistant"
@@ -114,7 +119,12 @@ def test_conversation_audio_roundtrip_includes_teacher_audio(monkeypatch: pytest
         "history": [],
     }
 
-    response = client.post("/api/v1/conversation", json=payload)
+    original_model = getattr(main_module.tutor_engine.asr, "_model", None)
+    main_module.tutor_engine.asr._model = object()
+    try:
+        response = client.post("/api/v1/conversation", json=payload)
+    finally:
+        main_module.tutor_engine.asr._model = original_model
     assert response.status_code == 200
     data = response.json()
 
