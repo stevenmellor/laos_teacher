@@ -28,7 +28,7 @@ Key decisions:
 | Desktop packaging | Tauri (Rust) | Yes | Wraps web UI for native permissions, lightweight vs Electron. |
 | Transport | FastAPI WebSocket server | Yes | Streams PCM chunks and TTS audio; uvicorn workers. |
 | STT | `faster-whisper` w/ CTranslate2 GPU or `whisper.cpp` CPU | Yes | Use medium/small models; quantise (int8) for laptops. |
-| VAD | Silero ONNX (`silero-vad`) | Yes | Tiny model (<5 MB). |
+| VAD | WebRTC VAD (`webrtcvad-wheels`) + Silero ONNX fallback | Yes | WebRTC for deterministic gating, Silero for smarter detection. |
 | TTS | `transformers` + MMS-TTS Lao; optional VITS fine-tune later | Yes | Provide normal and slow "teacher mode" voices. |
 | Lao NLP | `laonlp`, `chamkho`, custom BGN/PCGN romaniser | Yes | Preload dictionaries; ensure Unicode normalization (NFC). |
 | Tutor logic | LangGraph or custom FSM + Pydantic lesson schemas | Yes | Deterministic transitions; LLM optional for English explanations. |
