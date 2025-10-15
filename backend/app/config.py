@@ -20,7 +20,10 @@ class Settings(BaseSettings):
     app_name: str = Field("Lao Tutor Backend", description="Human readable application name")
     environment: str = Field("development", description="Current execution environment")
     data_dir: Path = Field(Path("data"), description="Directory for persistent data files")
-    model_dir: Path = Field(Path("models"), description="Directory containing ML models")
+    model_dir: Path = Field(
+        Path.home() / ".cache" / "lao_tutor" / "models",
+        description="Directory containing ML models",
+    )
     log_dir: Path = Field(Path("logs"), description="Directory where application logs are written")
     whisper_model_size: str = Field(
         "small", description="Default Whisper model size identifier (tiny, base, small, medium, large)"

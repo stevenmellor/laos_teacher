@@ -60,6 +60,14 @@ This repository contains an experimental, local-first Lao (ລາວ) language t
    uvicorn backend.app.main:app --reload --port 8000
    ```
 
+   Large models downloaded from Hugging Face are cached under `~/.cache/lao_tutor/models` by
+   default so the auto-reloader does not thrash. If you override `LAO_TUTOR_MODEL_DIR` to a path
+   within the repository, consider excluding it from the watcher:
+
+   ```bash
+   uvicorn backend.app.main:app --reload --port 8000 --reload-exclude "models/*"
+   ```
+
 3. From the landing page, click **🎙️ Record phrase** to capture a Lao utterance directly in the browser. The backend will transcribe it, surface romanisation/corrections, and (when models are available) play back teacher audio generated with Meta's MMS Lao voice.
 
 4. Alternatively, send base64-encoded PCM audio to `/api/v1/utterance` programmatically for the same feedback pipeline.
@@ -75,7 +83,7 @@ All runtime settings can be provided through environment variables (prefixed wit
 | `LAO_TUTOR_APP_NAME` | `Lao Tutor Backend` | Human-readable application name for logging/metadata. |
 | `LAO_TUTOR_ENVIRONMENT` | `development` | Execution environment tag (e.g., `development`, `production`). |
 | `LAO_TUTOR_DATA_DIR` | `data` | Directory for persisted learner data and lesson assets. |
-| `LAO_TUTOR_MODEL_DIR` | `models` | Location where downloaded ML model weights are stored. |
+| `LAO_TUTOR_MODEL_DIR` | `~/.cache/lao_tutor/models` | Location where downloaded ML model weights are stored. |
 | `LAO_TUTOR_LOG_DIR` | `logs` | Directory where rotating log files (`app.log`) are written. |
 | `LAO_TUTOR_WHISPER_MODEL_SIZE` | `small` | Whisper checkpoint family to load for ASR (`tiny`, `base`, `small`, `medium`, `large`). |
 | `LAO_TUTOR_SQLITE_PATH` | `data/tutor.db` | Path to the SQLite database backing the SRS store. |
