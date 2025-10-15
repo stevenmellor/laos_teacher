@@ -5,7 +5,10 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Optional
 
-from pydantic import BaseSettings, Field
+try:  # pragma: no cover - import resolution differs across Pydantic versions
+    from pydantic import BaseSettings, Field
+except Exception:  # Pydantic v2 raises a custom error; fall back to the v1 compatibility layer
+    from pydantic.v1 import BaseSettings, Field  # type: ignore
 
 
 class Settings(BaseSettings):
