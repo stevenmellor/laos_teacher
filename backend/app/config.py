@@ -28,6 +28,17 @@ class Settings(BaseSettings):
     whisper_model_size: str = Field(
         "small", description="Default Whisper model size identifier (tiny, base, small, medium, large)"
     )
+    whisper_language: str = Field(
+        "lo",
+        description="Optional language hint passed to Whisper. Set to an empty string to rely on automatic detection.",
+    )
+    whisper_auto_detect_fallback: bool = Field(
+        True,
+        description=(
+            "When True, rerun transcription without a language hint if no Lao text is detected so English utterances are"
+            " still recognised."
+        ),
+    )
     sqlite_path: Path = Field(Path("data/tutor.db"), description="Path to SQLite database file")
     enable_pitch_feedback: bool = Field(
         False,

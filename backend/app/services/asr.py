@@ -8,6 +8,7 @@ import numpy as np
 
 from ..config import get_settings
 from ..logging_utils import get_logger
+from .nlp import contains_lao_characters
 
 logger = get_logger(__name__)
 logger.debug("ASR service module loaded")
@@ -40,6 +41,8 @@ class AsrService:
         self.model_size = model_size or settings.whisper_model_size
         self.device = device
         self._model: Optional[WhisperModel] = None  # type: ignore[assignment]
+        self._language_hint = settings.whisper_language.strip() or None
+        self._auto_detect_fallback = settings.whisper_auto_detect_fallback
 
         if _whisper_supported():
             try:
@@ -50,7 +53,12 @@ class AsrService:
                 )
                 logger.info(
                     "Loaded Whisper model",
-                    extra={"model_size": self.model_size, "device": self.device},
+                    extra={
+                        "model_size": self.model_size,
+                        "device": self.device,
+                        "language_hint": self._language_hint or "auto",
+                        "auto_detect_fallback": self._auto_detect_fallback,
+                    },
                 )
             except Exception as exc:  # pragma: no cover - best-effort load
                 logger.warning("Could not load Whisper model", exc_info=exc)
@@ -61,6 +69,20 @@ class AsrService:
     def is_ready(self) -> bool:
         return self._model is not None
 
+    def _run_transcription(self, audio: np.ndarray, language: Optional[str]) -> tuple[str, Optional[str], float]:
+        if self._model is None:  # pragma: no cover - guarded by caller
+            raise RuntimeError("Whisper model is not initialised")
+        segments, info = self._model.transcribe(  # type: ignore[union-attr]
+            audio=audio,
+            beam_size=5,
+            language=language,
+            temperature=0.0,
+        )
+        text = " ".join(seg.text.strip() for seg in segments).strip()
+        probability = getattr(info, "language_probability", 0.0) or 0.0
+        detected_language = getattr(info, "language", None)
+        return text, detected_language, probability
+
     def transcribe(self, audio: np.ndarray, sample_rate: int) -> AsrResult:
         """Transcribe the audio buffer into Lao text."""
 
@@ -68,21 +90,25 @@ class AsrService:
             logger.debug("Returning placeholder transcription")
             return AsrResult(text="", language=None, confidence=0.0)
 
-        segments, info = self._model.transcribe(
-            audio=audio,
-            beam_size=5,
-            language="lo",
-            temperature=0.0,
-        )
-        text = " ".join(seg.text.strip() for seg in segments)
+        language_hint = self._language_hint
+        text, detected_language, probability = self._run_transcription(audio, language_hint)
+
+        if (
+            self._auto_detect_fallback
+            and (not text or not contains_lao_characters(text))
+            and (language_hint is not None)
+        ):
+            logger.info(
+                "Falling back to auto language detection",
+                extra={"initial_text": text, "hint": language_hint},
+            )
+            text, detected_language, probability = self._run_transcription(audio, None)
+
         logger.debug(
             "ASR transcription complete",
-            extra={
-                "text": text.strip(),
-                "confidence": getattr(info, "language_probability", None),
-            },
+            extra={"text": text, "language": detected_language, "confidence": probability},
         )
-        return AsrResult(text=text.strip(), language=info.language, confidence=info.language_probability)
+        return AsrResult(text=text, language=detected_language, confidence=probability)
 
 
 __all__ = ["AsrService", "AsrResult"]

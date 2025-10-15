@@ -54,6 +54,8 @@ class TutorEngine:
                 "ສະບາຍດີ": "Hello",
                 "ຂອບໃຈ": "Thank you",
                 "ຈົ່ງພູດຊ້າ": "Please speak slowly",
+                "ທ່ານສະບາຍດີບໍ?": "How are you?",
+                "ຂ້ອຍສຸກສະບາຍ": "I'm doing well",
             },
             "numbers_0_10": {
                 "ສູນ": "0",
@@ -219,14 +221,14 @@ class TutorEngine:
         *,
         text_override: Optional[str] = None,
     ) -> Optional[TtsResult]:
-        text = text_override or (
+        text = (text_override or (
             feedback.focus_phrase
             if feedback and feedback.focus_phrase
             else (feedback.lao_text if feedback else "")
-        )
+        )).strip()
         if not text:
             bank = self._phrase_bank.get(self.state.current_task, {})
-            text = next(iter(bank.keys()), "")
+            text = next(iter(bank.keys()), "").strip()
         if not text:
             logger.debug("No text available for TTS", extra={"task": self.state.current_task})
             return None

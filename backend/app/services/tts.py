@@ -91,6 +91,13 @@ class TtsService:
             logger.debug("Returning placeholder TTS", extra={"text": text})
             return None
         inputs = self._tokenizer(text, return_tensors="pt")  # type: ignore[operator]
+        input_ids = inputs.get("input_ids")  # type: ignore[assignment]
+        if input_ids is None or input_ids.shape[-1] <= 1:
+            logger.warning(
+                "TTS tokenizer produced no usable tokens",
+                extra={"text": text},
+            )
+            return None
         if self._torch_device:
             inputs = {key: value.to(self._torch_device) for key, value in inputs.items()}
         with torch.no_grad():  # type: ignore[operator]

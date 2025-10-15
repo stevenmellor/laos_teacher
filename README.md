@@ -88,6 +88,8 @@ This repository contains an experimental, local-first Lao (ລາວ) language t
 
    Likewise, a hint about the translation model indicates you should install the LLM extras (`uv pip install '.[llm]'`) so the NLLB weights can sync. Progress is logged in `logs/app.log` and echoed to stdout.
 
+7. If you see `LaoTokenizer unavailable` in the logs, install the optional Lao NLP dependencies (already bundled with the `speech` extra) and ensure system libraries such as `icu` are present. On macOS with Homebrew: `brew install icu4c` followed by `uv pip install '.[speech]' --reinstall`.
+
 ### Environment configuration
 
 All runtime settings can be provided through environment variables (prefixed with `LAO_TUTOR_`) or a `.env` file. The table below lists the available options and their defaults.
@@ -100,6 +102,8 @@ All runtime settings can be provided through environment variables (prefixed wit
 | `LAO_TUTOR_MODEL_DIR` | `~/.cache/lao_tutor/models` | Location where downloaded ML model weights are stored. |
 | `LAO_TUTOR_LOG_DIR` | `logs` | Directory where rotating log files (`app.log`) are written. |
 | `LAO_TUTOR_WHISPER_MODEL_SIZE` | `small` | Whisper checkpoint family to load for ASR (`tiny`, `base`, `small`, `medium`, `large`). |
+| `LAO_TUTOR_WHISPER_LANGUAGE` | `lo` | Language hint passed to Whisper (`""` falls back to automatic detection). |
+| `LAO_TUTOR_WHISPER_AUTO_DETECT_FALLBACK` | `true` | Rerun ASR without a language hint when no Lao characters are detected so English utterances are still understood. |
 | `LAO_TUTOR_SQLITE_PATH` | `data/tutor.db` | Path to the SQLite database backing the SRS store. |
 | `LAO_TUTOR_ENABLE_PITCH_FEEDBACK` | `false` | Enable pitch contour analysis (requires `librosa`). |
 | `LAO_TUTOR_SAMPLE_RATE` | `16000` | Target sample rate (Hz) for audio capture and synthesis. |
