@@ -66,7 +66,30 @@ This repository contains an experimental, local-first Lao (ລາວ) language t
 
 5. Chat with the tutor over text and generated Lao speech via `/api/v1/conversation` or by using the interactive widget on the root page. Each tutor reply now includes an inline audio player and "spoken reply" snippet so you can immediately listen back or replay the teacher.
 
-Environment variables such as `LAO_TUTOR_TTS_MODEL_NAME` and `LAO_TUTOR_TTS_DEVICE` can be used to switch voices or target a GPU/MPS runtime for faster synthesis.
+### Environment configuration
+
+All runtime settings can be provided through environment variables (prefixed with `LAO_TUTOR_`) or a `.env` file. The table below lists the available options and their defaults.
+
+| Environment variable | Default | Purpose |
+| --- | --- | --- |
+| `LAO_TUTOR_APP_NAME` | `Lao Tutor Backend` | Human-readable application name for logging/metadata. |
+| `LAO_TUTOR_ENVIRONMENT` | `development` | Execution environment tag (e.g., `development`, `production`). |
+| `LAO_TUTOR_DATA_DIR` | `data` | Directory for persisted learner data and lesson assets. |
+| `LAO_TUTOR_MODEL_DIR` | `models` | Location where downloaded ML model weights are stored. |
+| `LAO_TUTOR_LOG_DIR` | `logs` | Directory where rotating log files (`app.log`) are written. |
+| `LAO_TUTOR_WHISPER_MODEL_SIZE` | `small` | Whisper checkpoint family to load for ASR (`tiny`, `base`, `small`, `medium`, `large`). |
+| `LAO_TUTOR_SQLITE_PATH` | `data/tutor.db` | Path to the SQLite database backing the SRS store. |
+| `LAO_TUTOR_ENABLE_PITCH_FEEDBACK` | `false` | Enable pitch contour analysis (requires `librosa`). |
+| `LAO_TUTOR_SAMPLE_RATE` | `16000` | Target sample rate (Hz) for audio capture and synthesis. |
+| `LAO_TUTOR_VAD_THRESHOLD` | `0.35` | VAD probability cutoff shared across WebRTC/Silero/energy fallbacks. |
+| `LAO_TUTOR_LLM_MODEL_NAME` | `TinyLlama/TinyLlama-1.1B-Chat-v1.0` | Hugging Face identifier for the conversational tutor model. |
+| `LAO_TUTOR_LLM_DEVICE` | `cpu` | Device passed to the transformers pipeline (`cpu`, `cuda`, `mps`). |
+| `LAO_TUTOR_LLM_MAX_NEW_TOKENS` | `256` | Maximum number of tokens generated per conversational turn. |
+| `LAO_TUTOR_LLM_TEMPERATURE` | `0.7` | Sampling temperature for conversational responses. |
+| `LAO_TUTOR_TTS_MODEL_NAME` | `facebook/mms-tts-lao` | Hugging Face identifier for Lao TTS voice synthesis. |
+| `LAO_TUTOR_TTS_DEVICE` | `cpu` | Device used for MMS TTS inference (`cpu`, `cuda`, `mps`). |
+
+Set any of these variables before launching Uvicorn (or define them in `.env`) to customise the tutor’s behaviour.
 
 ## Logging
 
