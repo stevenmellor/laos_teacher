@@ -27,11 +27,6 @@ speech = [
   "sentence-transformers>=3.0,<4.0",
   "laonlp>=0.4,<0.5",
 ]
-
-[tool.uv]
-package = "lao-teacher"
-
-[tool.uv.pip]
-dev-dependencies = [
+dev = [
   "pytest>=8.0,<9.0",
 ]

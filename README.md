@@ -24,7 +24,13 @@ This repository contains an experimental, local-first Lao (ລາວ) language t
    The `pyproject.toml` defines optional extras. Install the full speech stack when you are ready to run inference locally:
 
    ```bash
-   uv pip install .[speech]
+   uv pip install '.[speech]'
+   ```
+
+   For development workflows that rely on the bundled pytest suite, install the dev tools extra (or combine it with `speech`).
+
+   ```bash
+   uv pip install '.[dev]'
    ```
 
    For lightweight API-only development you can continue to rely on `backend/requirements.txt`, which mirrors the base dependencies:
