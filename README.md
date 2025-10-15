@@ -13,6 +13,7 @@ This repository contains an experimental, local-first Lao (ລາວ) language t
 - Meta MMS-based Lao TTS interface (defaulting to `facebook/mms-tts-lao`) with graceful fallback behaviour
 - SQLite-backed spaced repetition (SM-2 style) store to track learner progress
 - Centralised logging with rotating file handlers writing to `logs/app.log`
+- Optional Lao→English translation via Hugging Face NLLB so every tutor reply pairs Lao script with an English gloss
 
 ## Getting started
 
@@ -41,6 +42,9 @@ This repository contains an experimental, local-first Lao (ລາວ) language t
    ```bash
    uv pip install '.[speech,llm]'
    ```
+
+   The conversational + translation path relies on `transformers`, `torch`, and `sentencepiece`, all of which are covered by the
+   combined extras above.
 
    For development workflows that rely on the bundled pytest suite, install the dev tools extra (or combine it with `speech`).
 
@@ -96,6 +100,10 @@ All runtime settings can be provided through environment variables (prefixed wit
 | `LAO_TUTOR_LLM_TEMPERATURE` | `0.7` | Sampling temperature for conversational responses. |
 | `LAO_TUTOR_TTS_MODEL_NAME` | `facebook/mms-tts-lao` | Hugging Face identifier for Lao TTS voice synthesis. |
 | `LAO_TUTOR_TTS_DEVICE` | `cpu` | Device used for MMS TTS inference (`cpu`, `cuda`, `mps`). |
+| `LAO_TUTOR_TRANSLATION_MODEL_NAME` | `facebook/nllb-200-distilled-600M` | Translation checkpoint for Lao → English glosses. |
+| `LAO_TUTOR_TRANSLATION_SOURCE_LANG` | `lo_Laoo` | Source language code passed to the translation model. |
+| `LAO_TUTOR_TRANSLATION_TARGET_LANG` | `eng_Latn` | Target language code passed to the translation model. |
+| `LAO_TUTOR_TRANSLATION_DEVICE` | `cpu` | Device identifier for translation inference (`cpu`, `cuda`, `mps`). |
 
 Set any of these variables before launching Uvicorn (or define them in `.env`) to customise the tutor’s behaviour.
 

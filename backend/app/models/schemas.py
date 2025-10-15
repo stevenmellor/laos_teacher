@@ -49,6 +49,7 @@ class HealthResponse(BaseModel):
     vad_backend: str
     tts_available: bool
     llm_available: bool
+    translation_available: bool
 
 
 class ChatMessage(BaseModel):

@@ -13,6 +13,7 @@ from .asr import AsrService
 from .nlp import LaoTextProcessor
 from .srs import SrsRepository
 from .tts import TtsResult, TtsService
+from .translation import TranslationService
 from .vad import VoiceActivityDetector
 
 logger = get_logger(__name__)
@@ -35,6 +36,7 @@ class TutorEngine:
         self.tts = TtsService(settings.tts_model_name, settings.tts_device)
         self.text_processor = LaoTextProcessor()
         self.srs = SrsRepository(settings.sqlite_path)
+        self.translator = TranslationService()
         self.state = TutorState()
         self._phrase_bank = self._load_phrase_bank()
         logger.info(
@@ -83,6 +85,18 @@ class TutorEngine:
         asr_result = self.asr.transcribe(audio, sample_rate)
         segmented = self.text_processor.segment(asr_result.text)
         translation = self._phrase_bank.get(self.state.current_task, {}).get(asr_result.text)
+        if translation is None and asr_result.text:
+            translation_result = self.translator.translate(asr_result.text)
+            if translation_result:
+                translation = translation_result.text
+                logger.info(
+                    "Translation generated",
+                    extra={
+                        "source": asr_result.text,
+                        "translation": translation,
+                        "backend": translation_result.backend,
+                    },
+                )
 
         corrections: List[str] = []
         praise: Optional[str] = None

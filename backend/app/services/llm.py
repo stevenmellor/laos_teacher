@@ -6,6 +6,8 @@ from typing import Dict, List, Optional
 
 from ..config import get_settings
 from ..logging_utils import get_logger
+from ..models.schemas import SegmentFeedback
+from .nlp import LaoTextProcessor
 
 logger = get_logger(__name__)
 logger.debug("Conversation service module loaded")
@@ -48,8 +50,8 @@ class ConversationService:
     """Wrap an LLM (or fallback heuristics) to keep the tutor conversational."""
 
     _SYSTEM_PROMPT = (
-        "You are a warm, encouraging Lao language teacher. Always include Lao script, a simple transliteration, "
-        "and an English gloss when presenting phrases. Encourage the learner to repeat the Lao focus phrase."
+        "You are a warm, encouraging Lao language teacher who is fluent in English. "
+        "Always present Lao phrases alongside a romanisation and an English translation so the learner understands the meaning."
     )
 
     def __init__(self, phrase_bank: Optional[Dict[str, Dict[str, str]]] = None) -> None:
@@ -61,6 +63,7 @@ class ConversationService:
         self._device = settings.llm_device
         self._generator = None
         self._tokenizer = None
+        self._text_processor = LaoTextProcessor()
 
         if _TRANSFORMERS_AVAILABLE and _TORCH_AVAILABLE:
             try:
@@ -103,6 +106,40 @@ class ConversationService:
             return None, None
         phrase, translation = next(iter(bank.items()))
         return phrase, translation
+
+    def _romanise(self, text: Optional[str]) -> str:
+        if not text:
+            return ""
+        return self._text_processor.segment(text).romanised
+
+    def _build_summary(
+        self,
+        observation: Optional[SegmentFeedback],
+        focus_phrase: Optional[str],
+        focus_translation: Optional[str],
+    ) -> str:
+        lines: List[str] = []
+        if observation and observation.lao_text:
+            observed_translation = observation.translation or "We'll learn this meaning together."
+            observed_romanised = observation.romanised or self._romanise(observation.lao_text)
+            romanised_note = f" ({observed_romanised})" if observed_romanised else ""
+            lines.append(
+                f"I heard you say \"{observation.lao_text}\"{romanised_note}. In English, that means \"{observed_translation}\"."
+            )
+            if not focus_phrase:
+                focus_phrase = observation.lao_text
+                focus_translation = observation.translation or focus_translation
+
+        if focus_phrase:
+            focus_romanised = self._romanise(focus_phrase)
+            romanised_note = f" ({focus_romanised})" if focus_romanised else ""
+            english_gloss = focus_translation or "our target phrase today."
+            lines.append(
+                f"Let's practise \"{focus_phrase}\"{romanised_note} – \"{english_gloss}\"."
+            )
+
+        lines.append("Repeat it aloud and pay close attention to the tone contour.")
+        return " ".join(lines)
 
     def _format_prompt(
         self, history: ChatHistory, user_message: str, focus_phrase: Optional[str], focus_translation: Optional[str]
@@ -152,12 +189,21 @@ class ConversationService:
         return reply, focus_phrase
 
     def generate(
-        self, history: ChatHistory, user_message: str, task_id: Optional[str] = None
+        self,
+        history: ChatHistory,
+        user_message: str,
+        task_id: Optional[str] = None,
+        observation: Optional[SegmentFeedback] = None,
     ) -> ConversationResult:
         if not user_message.strip():
             raise ValueError("Message must not be empty")
 
         focus_phrase, focus_translation = self._select_focus_phrase(task_id)
+
+        if observation and observation.lao_text:
+            focus_phrase = observation.lao_text
+            if observation.translation:
+                focus_translation = observation.translation
 
         logger.info(
             "Generating tutor response",
@@ -170,8 +216,16 @@ class ConversationService:
 
         spoken_text: Optional[str] = None
 
+        summary = self._build_summary(observation, focus_phrase, focus_translation)
+        reply = summary
+        debug: Dict[str, str] = {"backend": "summary"}
+
         if self._generator and self._tokenizer:
             prompt = self._format_prompt(history, user_message, focus_phrase, focus_translation)
+            prompt += (
+                "\nSystem: Craft one or two additional encouraging English sentences with specific pronunciation or tone tips."
+                " Always restate the Lao focus phrase with its romanisation and English meaning."
+            )
             try:
                 outputs = self._generator(
                     prompt,
@@ -180,11 +234,15 @@ class ConversationService:
                     pad_token_id=self._tokenizer.eos_token_id,
                 )
                 generated = outputs[0]["generated_text"]
-                reply = generated[len(prompt) :].strip() or generated.strip()
+                llm_tail = generated[len(prompt) :].strip() or generated.strip()
+                if llm_tail:
+                    reply = f"{summary}\n\n{llm_tail}"
                 spoken_text = self._extract_lao_line(reply)
             except Exception as exc:  # pragma: no cover - runtime safety
                 logger.warning("Generation failed; using fallback response", exc_info=exc)
-                reply, spoken_text = self._fallback_reply(user_message, focus_phrase, focus_translation)
+                fallback_reply, fallback_spoken = self._fallback_reply(user_message, focus_phrase, focus_translation)
+                reply = f"{summary}\n\n{fallback_reply}"
+                spoken_text = fallback_spoken or spoken_text
                 debug = {"backend": "fallback", "reason": str(exc)}
             else:
                 debug = {"backend": "transformers", "model": self._model_name}
@@ -193,7 +251,9 @@ class ConversationService:
                     extra={"reply_chars": len(reply), "spoken": bool(spoken_text)},
                 )
         else:
-            reply, spoken_text = self._fallback_reply(user_message, focus_phrase, focus_translation)
+            fallback_reply, fallback_spoken = self._fallback_reply(user_message, focus_phrase, focus_translation)
+            reply = f"{summary}\n\n{fallback_reply}" if fallback_reply else summary
+            spoken_text = fallback_spoken
             debug = {"backend": "fallback"}
             logger.debug("Using scripted fallback reply")
 

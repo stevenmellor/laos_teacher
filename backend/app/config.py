@@ -64,6 +64,22 @@ class Settings(BaseSettings):
         "cpu",
         description="Preferred device for TTS inference (cpu, cuda, mps)",
     )
+    translation_model_name: str = Field(
+        "facebook/nllb-200-distilled-600M",
+        description="Hugging Face identifier for Lao->English translation",
+    )
+    translation_source_lang: str = Field(
+        "lo_Laoo",
+        description="Source language code for the translation model",
+    )
+    translation_target_lang: str = Field(
+        "eng_Latn",
+        description="Target language code for the translation model",
+    )
+    translation_device: str = Field(
+        "cpu",
+        description="Device identifier for translation inference (cpu, cuda, mps)",
+    )
 
     class Config:
         env_prefix = "LAO_TUTOR_"

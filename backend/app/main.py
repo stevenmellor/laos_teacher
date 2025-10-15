@@ -95,6 +95,7 @@ def healthcheck() -> HealthResponse:
             "asr_ready": tutor_engine.asr.is_ready,
             "tts_ready": tutor_engine.tts.is_ready,
             "llm_ready": conversation_service.is_ready,
+            "translation_ready": tutor_engine.translator.is_ready,
         },
     )
     return HealthResponse(
@@ -103,6 +104,7 @@ def healthcheck() -> HealthResponse:
         vad_backend=tutor_engine.vad.backend_name,
         tts_available=tutor_engine.tts.is_ready,
         llm_available=conversation_service.is_ready,
+        translation_available=tutor_engine.translator.is_ready,
     )
 
 
@@ -155,6 +157,7 @@ def handle_utterance(payload: UtteranceRequest) -> UtteranceResponse:
         "vad_backend": tutor_engine.vad.backend_name,
         "asr_ready": tutor_engine.asr.is_ready,
         "tts_ready": tutor_engine.tts.is_ready,
+        "translation_ready": tutor_engine.translator.is_ready,
     }
     return UtteranceResponse(
         feedback=feedback,
@@ -196,7 +199,12 @@ def handle_conversation(payload: ConversationRequest) -> ConversationResponse:
         message_text = "I could not speak clearly."
 
     try:
-        result = conversation_service.generate(history_payload, message_text, payload.task_id)
+        result = conversation_service.generate(
+            history_payload,
+            message_text,
+            payload.task_id,
+            observation=utterance_feedback,
+        )
     except ValueError as exc:
         logger.error("Conversation generation failed", exc_info=exc)
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -229,6 +237,7 @@ def handle_conversation(payload: ConversationRequest) -> ConversationResponse:
                 "sample_rate": sample_rate,
                 "vad_backend": tutor_engine.vad.backend_name,
                 "asr_ready": tutor_engine.asr.is_ready,
+                "translation_ready": tutor_engine.translator.is_ready,
             }
         )
     else:

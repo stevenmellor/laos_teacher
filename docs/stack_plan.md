@@ -31,6 +31,7 @@ Key decisions:
 | VAD | WebRTC VAD (`webrtcvad-wheels`) + Silero ONNX fallback | Yes | WebRTC for deterministic gating, Silero for smarter detection. |
 | TTS | `transformers` + MMS-TTS Lao; optional VITS fine-tune later | Yes | Provide normal and slow "teacher mode" voices. |
 | Lao NLP | `laonlp`, `chamkho`, custom BGN/PCGN romaniser | Yes | Preload dictionaries; ensure Unicode normalization (NFC). |
+| Translation | `transformers` + NLLB-200 distilled models | Yes | Provide Lao→English glosses for bilingual prompts and coaching. |
 | Tutor logic | LangGraph or custom FSM + Pydantic lesson schemas | Yes | Deterministic transitions; LLM optional for English explanations. |
 | Retrieval | SQLite FTS5 + `faiss-cpu` or `sentence-transformers` LaBSE embeddings | Yes | Power contextual prompts and error lookup without external calls. |
 | Pronunciation | `librosa` (YIN pitch), Montreal Forced Aligner (custom Lao lexicon) | Yes | Provide tone contour overlays & phoneme timing. |

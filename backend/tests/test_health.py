@@ -25,6 +25,7 @@ def test_health_endpoint():
     assert "vad_backend" in payload
     assert "whisper_loaded" in payload
     assert "llm_available" in payload
+    assert "translation_available" in payload
 
 
 def test_index_serves_html_by_default():
@@ -58,6 +59,7 @@ def test_conversation_endpoint_returns_reply():
     payload = response.json()
     assert payload["reply"]["role"] == "assistant"
     assert payload["reply"]["content"]
+    assert "Let's practise" in payload["reply"]["content"]
     assert isinstance(payload["history"], list)
     assert payload["history"], "History should include the new turn"
     assert "heard_text" in payload
@@ -86,6 +88,7 @@ def test_conversation_accepts_audio_only():
     body = response.json()
     assert body["reply"]["role"] == "assistant"
     assert body["utterance_feedback"] is not None
+    assert "Let's practise" in body["reply"]["content"]
     assert "spoken_text" in body
 
 
@@ -119,3 +122,4 @@ def test_conversation_audio_roundtrip_includes_teacher_audio(monkeypatch: pytest
     assert data["teacher_audio_base64"] == fake_teacher_audio
     assert data["teacher_audio_sample_rate"] == 16000
     assert data["utterance_feedback"] is not None
+    assert "I heard you say" in data["reply"]["content"]
