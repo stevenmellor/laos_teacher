@@ -73,6 +73,32 @@ def test_conversation_endpoint_returns_reply():
     assert payload["focus_translation"]
 
 
+def test_conversation_maps_composite_english_phrase(monkeypatch: pytest.MonkeyPatch):
+    """Ensure English input with extra words still maps to a Lao focus phrase."""
+
+    from backend.app.services.translation import TranslationResult
+
+    logger.info("Running composite English mapping test")
+    client = TestClient(app)
+
+    def fake_translate(_: str) -> TranslationResult:
+        return TranslationResult(text="Hello, how are you?", backend="stub", direction="en->lo")
+
+    monkeypatch.setattr(main_module.tutor_engine.translator, "translate", fake_translate)
+
+    response = client.post(
+        "/api/v1/conversation",
+        json={"message": "Hello, how are you?", "history": []},
+    )
+    assert response.status_code == 200
+    payload = response.json()
+
+    assert payload["focus_phrase"]
+    assert any("\u0E80" <= ch <= "\u0EFF" for ch in payload["focus_phrase"])
+    assert payload["focus_translation"]
+    assert "Let's practise" in payload["reply"]["content"]
+
+
 def test_conversation_rejects_empty_payload():
     logger.info("Running conversation validation test")
     client = TestClient(app)

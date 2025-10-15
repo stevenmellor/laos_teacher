@@ -75,20 +75,51 @@ class TutorEngine:
         return re.sub(r"[^a-z0-9\s]", "", lowered)
 
     def _find_phrase_by_translation(self, text: str) -> tuple[Optional[str], Optional[str]]:
+        """Return the best Lao phrase whose English gloss resembles *text*."""
+
         if not text:
             return None, None
+
         normalized = self._normalize_key(text)
         if not normalized:
             return None, None
+
+        best_phrase: Optional[str] = None
+        best_translation: Optional[str] = None
+        best_score = 0
+
         for task, phrases in self._phrase_bank.items():
             for phrase, translation in phrases.items():
-                if translation and self._normalize_key(translation) == normalized:
+                if not translation:
+                    continue
+
+                candidate = self._normalize_key(translation)
+                if not candidate:
+                    continue
+
+                exact_match = candidate == normalized
+                subset_match = candidate in normalized or normalized in candidate
+
+                if not exact_match and not subset_match:
+                    continue
+
+                score = len(candidate)
+                if score > best_score:
+                    best_phrase = phrase
+                    best_translation = translation
+                    best_score = score
                     logger.debug(
                         "Matched English phrase to Lao target",
-                        extra={"task": task, "phrase": phrase, "translation": translation},
+                        extra={
+                            "task": task,
+                            "phrase": phrase,
+                            "translation": translation,
+                            "score": score,
+                            "normalized_query": normalized,
+                        },
                     )
-                    return phrase, translation
-        return None, None
+
+        return best_phrase, best_translation
 
     def process_audio(self, audio: np.ndarray, sample_rate: int, task_id: Optional[str] = None) -> SegmentFeedback:
         if task_id:
@@ -133,7 +164,17 @@ class TutorEngine:
                 if translation_result.direction == "lo->en":
                     translation = translation_result.text
                 else:
-                    focus_from_translation = translation_result.text
+                    if contains_lao_characters(translation_result.text):
+                        focus_from_translation = translation_result.text
+                    else:
+                        logger.debug(
+                            "Reverse translation produced non-Lao text",
+                            extra={
+                                "source": asr_result.text,
+                                "translation": translation_result.text,
+                                "direction": translation_result.direction,
+                            },
+                        )
                     translation = translation or asr_result.text
                 logger.info(
                     "Translation generated",
