@@ -29,6 +29,16 @@ app.add_middleware(
 )
 
 
+@app.get("/")
+def index() -> dict[str, str]:
+    """Simple landing endpoint for service discovery."""
+    return {
+        "service": "lao-tutor",
+        "message": "Send audio to /api/v1/utterance or probe /health",
+        "docs": "/docs",
+    }
+
+
 @app.get("/health", response_model=HealthResponse)
 def healthcheck() -> HealthResponse:
     return HealthResponse(
