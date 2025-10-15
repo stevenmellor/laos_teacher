@@ -27,6 +27,16 @@ speech = [
   "sentence-transformers>=3.0,<4.0",
   "laonlp>=0.4,<0.5",
 ]
+llm = [
+  "transformers>=4.44,<5.0",
+  "accelerate>=0.34,<1.0",
+  "sentencepiece>=0.1.99",
+  "safetensors>=0.4,<1.0",
+]
 dev = [
   "pytest>=8.0,<9.0",
 ]
+
+[tool.setuptools.packages.find]
+include = ["backend*"]
+exclude = ["data", "data.*", "models", "models.*"]

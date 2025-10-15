@@ -4,7 +4,7 @@ This repository contains an experimental, local-first Lao (ລາວ) language t
 
 ## Features
 
-- FastAPI backend with `/health` and `/api/v1/utterance` endpoints
+- FastAPI backend with `/health`, `/api/v1/utterance`, and `/api/v1/conversation` endpoints
 - Voice activity detection prioritising WebRTC VAD, with Silero and energy fallbacks
 - Whisper ASR wrapper for Lao transcription (gracefully degrades when models are absent)
 - Lao segmentation and romanisation helper with LaoNLP integration when installed
@@ -27,6 +27,12 @@ This repository contains an experimental, local-first Lao (ລາວ) language t
    uv pip install '.[speech]'
    ```
 
+   Add the conversational LLM components (TinyLlama by default) with:
+
+   ```bash
+   uv pip install '.[llm]'
+   ```
+
    For development workflows that rely on the bundled pytest suite, install the dev tools extra (or combine it with `speech`).
 
    ```bash
@@ -46,6 +52,8 @@ This repository contains an experimental, local-first Lao (ລາວ) language t
    ```
 
 3. Send audio (base64 encoded PCM) to the `/api/v1/utterance` endpoint to receive feedback and optional synthesized audio.
+
+4. Chat with the tutor over text (and optional generated audio) via `/api/v1/conversation` or by using the interactive widget on the root page.
 
 ## Tests
 

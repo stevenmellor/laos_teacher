@@ -32,6 +32,23 @@ class Settings(BaseSettings):
         0.35,
         description="Decision threshold (0-1) for VAD probability across WebRTC, Silero, or energy fallback",
     )
+    # Conversational LLM configuration
+    llm_model_name: str = Field(
+        "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+        description="Default Hugging Face identifier for the conversational tutor model",
+    )
+    llm_device: str = Field(
+        "cpu",
+        description="Device identifier passed to transformers pipeline (cpu, cuda, mps)",
+    )
+    llm_max_new_tokens: int = Field(
+        256,
+        description="Maximum number of tokens to generate for each conversational turn",
+    )
+    llm_temperature: float = Field(
+        0.7,
+        description="Sampling temperature applied during conversational generation",
+    )
 
     class Config:
         env_prefix = "LAO_TUTOR_"
@@ -48,5 +65,6 @@ def get_settings() -> Settings:
     settings.model_dir.mkdir(parents=True, exist_ok=True)
     settings.sqlite_path.parent.mkdir(parents=True, exist_ok=True)
     return settings
+
 
 SettingsType = Settings

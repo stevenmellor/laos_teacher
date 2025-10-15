@@ -1,7 +1,7 @@
 """Pydantic schemas for API payloads."""
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -32,6 +32,9 @@ class UtteranceResponse(BaseModel):
     teacher_audio_base64: Optional[str] = Field(
         None, description="Base64 encoded PCM audio of the teacher response"
     )
+    teacher_audio_sample_rate: Optional[int] = Field(
+        None, description="Sample rate in Hz for the teacher audio clip"
+    )
     debug: Optional[dict] = Field(default=None, description="Optional debug information")
 
 
@@ -40,3 +43,37 @@ class HealthResponse(BaseModel):
     whisper_loaded: bool
     vad_backend: str
     tts_available: bool
+    llm_available: bool
+
+
+class ChatMessage(BaseModel):
+    role: Literal["system", "user", "assistant"]
+    content: str
+
+
+class ConversationRequest(BaseModel):
+    message: str = Field(..., description="Latest learner utterance in text form")
+    history: List[ChatMessage] = Field(
+        default_factory=list, description="Prior conversation turns for additional context"
+    )
+    task_id: Optional[str] = Field(
+        default=None, description="Optional curriculum task identifier to steer the conversation"
+    )
+
+
+class ConversationResponse(BaseModel):
+    reply: ChatMessage
+    history: List[ChatMessage]
+    focus_phrase: Optional[str] = Field(
+        default=None, description="Lao phrase the tutor suggests practising"
+    )
+    focus_translation: Optional[str] = Field(
+        default=None, description="English gloss for the focus phrase"
+    )
+    teacher_audio_base64: Optional[str] = Field(
+        default=None, description="Optional teacher audio clip encoded as base64 float32 PCM"
+    )
+    teacher_audio_sample_rate: Optional[int] = Field(
+        default=None, description="Sample rate corresponding to the teacher audio clip"
+    )
+    debug: Optional[dict] = Field(default=None, description="Backend metadata for diagnostics")
