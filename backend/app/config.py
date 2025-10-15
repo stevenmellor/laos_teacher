@@ -49,5 +49,4 @@ def get_settings() -> Settings:
     settings.sqlite_path.parent.mkdir(parents=True, exist_ok=True)
     return settings
 
-
 SettingsType = Settings

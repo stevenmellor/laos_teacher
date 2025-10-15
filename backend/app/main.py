@@ -93,25 +93,3 @@ def _decode_audio(audio_base64: str, expected_sample_rate: int) -> np.ndarray:
     if audio.size == 0:
         raise HTTPException(status_code=400, detail="Empty audio payload")
     return audio
-
-
-@app.post("/api/v1/utterance", response_model=UtteranceResponse)
-def handle_utterance(payload: UtteranceRequest) -> UtteranceResponse:
-    sample_rate = payload.sample_rate or settings.sample_rate
-    audio = _decode_audio(payload.audio_base64, sample_rate)
-    feedback: SegmentFeedback = tutor_engine.process_audio(audio, sample_rate, payload.task_id)
-    teacher_audio_base64 = tutor_engine.prepare_teacher_audio(feedback)
-    debug_info: dict[str, Any] = {
-        "task": tutor_engine.state.current_task,
-        "vad_backend": tutor_engine.vad.backend_name,
-        "asr_ready": tutor_engine.asr.is_ready,
-        "tts_ready": tutor_engine.tts.is_ready,
-    }
-    return UtteranceResponse(
-        feedback=feedback,
-        teacher_audio_base64=teacher_audio_base64,
-        debug=debug_info,
-    )
-
-
-__all__ = ["app"]
