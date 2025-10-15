@@ -58,15 +58,18 @@ def test_conversation_endpoint_returns_reply():
     assert response.status_code == 200
     payload = response.json()
     assert payload["reply"]["role"] == "assistant"
-    assert payload["reply"]["content"]
-    assert "Let's practise" in payload["reply"]["content"]
-    assert "Hello" in payload["reply"]["content"]
+    reply_content = payload["reply"]["content"]
+    assert reply_content
+    assert "Let's practise" in reply_content
+    assert "Hello" in reply_content
+    assert "System:" not in reply_content
     assert isinstance(payload["history"], list)
     assert payload["history"], "History should include the new turn"
     assert "heard_text" in payload
     assert "spoken_text" in payload
     assert payload["utterance_feedback"] is None
     assert payload["focus_phrase"]
+    assert any("\u0E80" <= ch <= "\u0EFF" for ch in payload["focus_phrase"])
     assert payload["focus_translation"]
 
 
@@ -137,3 +140,4 @@ def test_conversation_audio_roundtrip_includes_teacher_audio(monkeypatch: pytest
     assert data["utterance_feedback"] is not None
     assert data["utterance_feedback"]["focus_phrase"] == "ທົດລອງ"
     assert "I heard you say" in data["reply"]["content"]
+    assert "System:" not in data["reply"]["content"]

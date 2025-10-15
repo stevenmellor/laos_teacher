@@ -117,6 +117,9 @@ All runtime settings can be provided through environment variables (prefixed wit
 | `LAO_TUTOR_TRANSLATION_MODEL_NAME` | `facebook/nllb-200-distilled-600M` | Translation checkpoint for Lao → English glosses. |
 | `LAO_TUTOR_TRANSLATION_SOURCE_LANG` | `lo_Laoo` | Source language code passed to the translation model. |
 | `LAO_TUTOR_TRANSLATION_TARGET_LANG` | `eng_Latn` | Target language code passed to the translation model. |
+| `LAO_TUTOR_TRANSLATION_REVERSE_MODEL_NAME` | `facebook/nllb-200-distilled-600M` | Translation checkpoint for English → Lao prompts. |
+| `LAO_TUTOR_TRANSLATION_REVERSE_SOURCE_LANG` | `eng_Latn` | Source language code for English input when mapping to Lao. |
+| `LAO_TUTOR_TRANSLATION_REVERSE_TARGET_LANG` | `lo_Laoo` | Target language code emitted when translating English phrases into Lao script. |
 | `LAO_TUTOR_TRANSLATION_DEVICE` | `cpu` | Device identifier for translation inference (`cpu`, `cuda`, `mps`). |
 
 Set any of these variables before launching Uvicorn (or define them in `.env`) to customise the tutor’s behaviour.

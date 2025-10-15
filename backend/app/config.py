@@ -87,6 +87,18 @@ class Settings(BaseSettings):
         "eng_Latn",
         description="Target language code for the translation model",
     )
+    translation_reverse_model_name: str = Field(
+        "facebook/nllb-200-distilled-600M",
+        description="Hugging Face identifier for English->Lao translation",
+    )
+    translation_reverse_source_lang: str = Field(
+        "eng_Latn",
+        description="Source language for the reverse translation (typically English)",
+    )
+    translation_reverse_target_lang: str = Field(
+        "lo_Laoo",
+        description="Target language for the reverse translation (Lao script)",
+    )
     translation_device: str = Field(
         "cpu",
         description="Device identifier for translation inference (cpu, cuda, mps)",

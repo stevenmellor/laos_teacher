@@ -1,6 +1,7 @@
 """Conversational LLM orchestration for the Lao tutor."""
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Dict, List, Optional
 
@@ -178,13 +179,35 @@ class ConversationService:
         return "\n".join(prompt_parts)
 
     @staticmethod
+    def _clean_generated_text(text: str) -> str:
+        if not text:
+            return ""
+        lines = []
+        for line in text.splitlines():
+            stripped = line.strip()
+            if not stripped:
+                continue
+            if re.match(r"^(system|user|assistant)\s*:\s*", stripped, re.IGNORECASE):
+                continue
+            lines.append(stripped)
+        cleaned = " ".join(lines)
+        if not cleaned:
+            return ""
+        sentences = re.split(r"(?<=[.!?])\s+", cleaned)
+        if len(sentences) > 2:
+            cleaned = " ".join(sentences[:2]).strip()
+        return cleaned.strip()
+
+    @staticmethod
     def _extract_lao_line(text: str) -> Optional[str]:
+        lao_pattern = re.compile(r"([\u0E80-\u0EFF]+(?:[\u0E80-\u0EFF\s]+)?)")
         for line in text.splitlines():
             candidate = line.strip()
             if not candidate:
                 continue
-            if any("຀" <= char <= "໿" for char in candidate):
-                return candidate
+            match = lao_pattern.search(candidate)
+            if match:
+                return match.group(1)
         return None
 
     def _fallback_reply(
@@ -254,6 +277,7 @@ class ConversationService:
                 )
                 generated = outputs[0]["generated_text"]
                 llm_tail = generated[len(prompt) :].strip() or generated.strip()
+                llm_tail = self._clean_generated_text(llm_tail)
                 if llm_tail:
                     reply = f"{summary}\n\n{llm_tail}"
                 spoken_text = self._extract_lao_line(reply)

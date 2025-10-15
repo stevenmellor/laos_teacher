@@ -4,6 +4,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Dict, List, Optional
 
+import re
+
 import numpy as np
 
 from ..config import get_settings
@@ -66,15 +68,21 @@ class TutorEngine:
         logger.debug("Phrase bank loaded", extra={"tasks": list(bank.keys())})
         return bank
 
+    def _normalize_key(self, text: str) -> str:
+        if not text:
+            return ""
+        lowered = text.lower().strip()
+        return re.sub(r"[^a-z0-9\s]", "", lowered)
+
     def _find_phrase_by_translation(self, text: str) -> tuple[Optional[str], Optional[str]]:
         if not text:
             return None, None
-        normalized = text.strip().lower()
+        normalized = self._normalize_key(text)
         if not normalized:
             return None, None
         for task, phrases in self._phrase_bank.items():
             for phrase, translation in phrases.items():
-                if translation and translation.strip().lower() == normalized:
+                if translation and self._normalize_key(translation) == normalized:
                     logger.debug(
                         "Matched English phrase to Lao target",
                         extra={"task": task, "phrase": phrase, "translation": translation},
@@ -118,15 +126,21 @@ class TutorEngine:
         asr_result = self.asr.transcribe(audio, sample_rate)
         segmented = self.text_processor.segment(asr_result.text)
         translation = self._phrase_bank.get(self.state.current_task, {}).get(asr_result.text)
+        focus_from_translation: Optional[str] = None
         if translation is None and asr_result.text:
             translation_result = self.translator.translate(asr_result.text)
             if translation_result:
-                translation = translation_result.text
+                if translation_result.direction == "lo->en":
+                    translation = translation_result.text
+                else:
+                    focus_from_translation = translation_result.text
+                    translation = translation or asr_result.text
                 logger.info(
                     "Translation generated",
                     extra={
                         "source": asr_result.text,
-                        "translation": translation,
+                        "translation": translation_result.text,
+                        "direction": translation_result.direction,
                         "backend": translation_result.backend,
                     },
                 )
@@ -153,6 +167,17 @@ class TutorEngine:
                     corrections.append(
                         (
                             f"Let's learn to say '{focus_translation}' in Lao: {matched_phrase}"
+                            f" ({focus_romanised})."
+                        )
+                    )
+                    translation = focus_translation
+                elif focus_from_translation:
+                    focus_phrase = focus_from_translation
+                    focus_translation = translation or asr_result.text
+                    focus_romanised = self.text_processor.segment(focus_phrase).romanised
+                    corrections.append(
+                        (
+                            f"Let's practise '{focus_translation}' in Lao: {focus_phrase}"
                             f" ({focus_romanised})."
                         )
                     )
@@ -229,6 +254,15 @@ class TutorEngine:
         if not text:
             bank = self._phrase_bank.get(self.state.current_task, {})
             text = next(iter(bank.keys()), "").strip()
+        if feedback and text and not contains_lao_characters(text):
+            if feedback.focus_phrase and contains_lao_characters(feedback.focus_phrase):
+                text = feedback.focus_phrase
+            else:
+                logger.debug(
+                    "Skipping TTS for non-Lao text",
+                    extra={"text": text, "task": self.state.current_task},
+                )
+                return None
         if not text:
             logger.debug("No text available for TTS", extra={"task": self.state.current_task})
             return None
