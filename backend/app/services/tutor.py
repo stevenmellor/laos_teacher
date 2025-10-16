@@ -27,6 +27,9 @@ logger.debug("Tutor engine module loaded")
 class TutorState:
     current_task: str = "day1_greetings"
     turn_count: int = 0
+    last_focus_phrase: Optional[str] = None
+    last_focus_translation: Optional[str] = None
+    awaiting_repeat: bool = False
 
 
 class TutorEngine:
@@ -41,6 +44,7 @@ class TutorEngine:
         self.srs = SrsRepository(settings.sqlite_path)
         self.translator = TranslationService()
         self.state = TutorState()
+        self._focus_indices: Dict[str, int] = {self.state.current_task: 0}
         self._phrase_bank = self._load_phrase_bank()
         self._romanised_cache: Dict[str, str] = {}
         logger.info(
@@ -181,6 +185,55 @@ class TutorEngine:
 
         return best_phrase, best_translation
 
+    def _current_focus(self, task_id: Optional[str] = None) -> tuple[Optional[str], Optional[str]]:
+        task = task_id or self.state.current_task
+        bank = self._phrase_bank.get(task, {})
+        if not bank:
+            return None, None
+        if task not in self._focus_indices:
+            self._focus_indices[task] = 0
+        index = self._focus_indices[task]
+        phrases = list(bank.items())
+        index = min(index, len(phrases) - 1)
+        phrase, translation = phrases[index]
+        return phrase, translation
+
+    def _advance_focus(self, task_id: Optional[str] = None) -> None:
+        task = task_id or self.state.current_task
+        bank = self._phrase_bank.get(task, {})
+        if not bank:
+            return
+        total = len(bank)
+        current_index = self._focus_indices.get(task, 0)
+        if current_index + 1 < total:
+            self._focus_indices[task] = current_index + 1
+        logger.debug(
+            "Advanced focus phrase",
+            extra={"task": task, "index": self._focus_indices.get(task, 0)},
+        )
+
+    def mark_focus_prompted(self, phrase: Optional[str], translation: Optional[str]) -> None:
+        if not phrase:
+            return
+        self.state.last_focus_phrase = phrase
+        self.state.last_focus_translation = translation
+        self.state.awaiting_repeat = True
+        logger.debug(
+            "Marked focus prompt",
+            extra={"phrase": phrase, "translation": translation},
+        )
+
+    def _register_success(self, task_id: Optional[str] = None) -> None:
+        self.state.awaiting_repeat = False
+        self._advance_focus(task_id)
+        logger.info(
+            "Learner completed focus phrase",
+            extra={
+                "phrase": self.state.last_focus_phrase,
+                "task": task_id or self.state.current_task,
+            },
+        )
+
     def process_audio(self, audio: np.ndarray, sample_rate: int, task_id: Optional[str] = None) -> SegmentFeedback:
         if task_id:
             self.state.current_task = task_id
@@ -199,6 +252,12 @@ class TutorEngine:
                 ],
                 praise=None,
             )
+
+        expected_phrase, expected_translation = self._current_focus(task_id)
+        expected_romanised = (
+            self.text_processor.segment(expected_phrase).romanised if expected_phrase else ""
+        )
+        expected_normalised = self._normalize_romanised(expected_romanised)
 
         vad_result = self.vad.detect(audio, sample_rate)
         if not vad_result.has_speech:
@@ -252,18 +311,49 @@ class TutorEngine:
         focus_phrase: Optional[str] = None
         focus_translation: Optional[str] = None
         focus_romanised: Optional[str] = None
+        success = False
+        completed_focus: Optional[str] = None
 
         if not asr_result.text:
             corrections.append("ຂໍໃຫ້ເວົ້າອີກຄັ້ງ – Try repeating the target phrase.")
         else:
+            heard_normalised = self._normalize_romanised(segmented.romanised)
             if contains_lao_characters(asr_result.text):
-                focus_phrase = asr_result.text
-                focus_translation = translation
-                focus_romanised = segmented.romanised
+                if (
+                    expected_phrase
+                    and heard_normalised
+                    and expected_normalised
+                    and SequenceMatcher(None, heard_normalised, expected_normalised).ratio() >= 0.75
+                ):
+                    focus_phrase = expected_phrase
+                    focus_translation = expected_translation or translation
+                    focus_romanised = expected_romanised or segmented.romanised
+                    praise = "ຍອດເຢັ່ຍ! Your pronunciation is improving."
+                    success = True
+                    completed_focus = expected_phrase
+                else:
+                    focus_phrase = asr_result.text
+                    focus_translation = translation
+                    focus_romanised = segmented.romanised
             else:
                 romanised_match, romanised_translation = self._find_phrase_by_romanised(asr_result.text)
                 matched_phrase, matched_translation = self._find_phrase_by_translation(asr_result.text)
-                if romanised_match:
+                heard_ascii = self._normalize_romanised(asr_result.text)
+                if (
+                    self.state.awaiting_repeat
+                    and expected_phrase
+                    and expected_normalised
+                    and heard_ascii
+                    and SequenceMatcher(None, heard_ascii, expected_normalised).ratio() >= 0.65
+                ):
+                    focus_phrase = expected_phrase
+                    focus_translation = expected_translation or translation or asr_result.text
+                    focus_romanised = expected_romanised or self.text_processor.segment(expected_phrase).romanised
+                    praise = "ດີຫຼາຍ! Great job repeating the Lao phrase."
+                    translation = focus_translation
+                    success = True
+                    completed_focus = expected_phrase
+                elif romanised_match:
                     focus_phrase = romanised_match
                     focus_translation = romanised_translation or translation or asr_result.text
                     focus_romanised = self.text_processor.segment(romanised_match).romanised
@@ -305,7 +395,24 @@ class TutorEngine:
                         "I heard English audio. Let's try speaking the Lao phrase slowly together."
                     )
 
-            if translation is None:
+            if success:
+                self._register_success(task_id)
+                next_phrase, next_translation = self._current_focus(task_id)
+                if next_phrase:
+                    focus_phrase = next_phrase
+                    focus_translation = next_translation or focus_translation
+                    focus_romanised = self.text_processor.segment(next_phrase).romanised
+                    translation = focus_translation or translation
+                    next_translation_text = focus_translation or "let's keep going."
+                    corrections.append(
+                        (
+                            "Great! Let's build on that. Our next phrase is "
+                            f"“{focus_phrase}” ({focus_romanised}) – {next_translation_text}"
+                        )
+                    )
+                else:
+                    translation = focus_translation or translation
+            elif translation is None:
                 hint = "Let's focus on today's target phrase. Repeat after me."
                 if not self.translator.is_ready:
                     hint += (
@@ -314,15 +421,16 @@ class TutorEngine:
                     )
                 corrections.append(hint)
             else:
-                praise = "ດີຫຼາຍ! Great job!"
-                card_id = focus_phrase or asr_result.text
-                self.srs.log_review(card_id=card_id, ease=1.0)
+                card_id = completed_focus or focus_phrase or asr_result.text
+                if success:
+                    self.srs.log_review(card_id=card_id, ease=1.0)
                 logger.info(
                     "Learner phrase recognised",
                     extra={
                         "text": asr_result.text,
                         "card_id": card_id,
                         "task": self.state.current_task,
+                        "success": success,
                     },
                 )
 
@@ -334,6 +442,19 @@ class TutorEngine:
             review_ids.append(focus_phrase)
         elif translation:
             review_ids.append(asr_result.text)
+
+        if not focus_phrase and expected_phrase:
+            focus_phrase = expected_phrase
+            focus_translation = expected_translation or translation
+            focus_romanised = expected_romanised or focus_romanised
+            translation = focus_translation or translation
+            if not success:
+                corrections.append(
+                    (
+                        f"Let's stay with '{focus_translation}' for now. Repeat {focus_phrase}"
+                        f" ({focus_romanised})."
+                    )
+                )
 
         return SegmentFeedback(
             lao_text=asr_result.text,
@@ -369,8 +490,9 @@ class TutorEngine:
             bank = self._phrase_bank.get(self.state.current_task, {})
             text = next(iter(bank.keys()), "").strip()
         if feedback and text and not contains_lao_characters(text):
-            if feedback.focus_phrase and contains_lao_characters(feedback.focus_phrase):
-                text = feedback.focus_phrase
+            fallback = feedback.focus_phrase or self.state.last_focus_phrase
+            if fallback and contains_lao_characters(fallback):
+                text = fallback
             else:
                 logger.debug(
                     "Skipping TTS for non-Lao text",
@@ -396,11 +518,7 @@ class TutorEngine:
         return self._phrase_bank.get(self.state.current_task, {})
 
     def get_focus_phrase(self, task_id: Optional[str] = None) -> tuple[Optional[str], Optional[str]]:
-        bank = self.get_phrase_bank(task_id)
-        if not bank:
-            return None, None
-        phrase, translation = next(iter(bank.items()))
-        return phrase, translation
+        return self._current_focus(task_id)
 
     def export_phrase_banks(self) -> Dict[str, Dict[str, str]]:
         return {task: phrases.copy() for task, phrases in self._phrase_bank.items()}

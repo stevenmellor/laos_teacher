@@ -261,7 +261,23 @@ class ConversationService:
         spoken_text: Optional[str] = None
 
         summary = self._build_summary(observation, focus_phrase, focus_translation)
-        reply = summary
+        introduction = ""
+        if not history:
+            intro_focus = focus_phrase or (observation.focus_phrase if observation else None)
+            intro_translation = focus_translation or (observation.focus_translation if observation else None)
+            introduction = (
+                "Sabaidee! I'm your Lao tutor. We'll take things step by step."
+            )
+            if intro_focus:
+                intro_romanised = self._romanise(intro_focus)
+                introduction += (
+                    f" Our first focus is “{intro_focus}” ({intro_romanised}) – "
+                    f"{intro_translation or 'a friendly greeting.'}"
+                )
+            introduction = introduction.strip()
+
+        reply_parts = [part for part in [introduction, summary] if part]
+        reply = "\n\n".join(reply_parts)
         debug: Dict[str, str] = {"backend": "summary"}
 
         if self._generator and self._tokenizer:

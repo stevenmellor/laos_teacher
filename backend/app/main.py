@@ -209,6 +209,8 @@ def handle_conversation(payload: ConversationRequest) -> ConversationResponse:
         logger.error("Conversation generation failed", exc_info=exc)
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+    tutor_engine.mark_focus_prompted(result.focus_phrase, result.focus_translation)
+
     tts_result = None
     spoken_text = result.spoken_text
     if spoken_text:
