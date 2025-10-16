@@ -28,6 +28,21 @@ class Settings(BaseSettings):
     whisper_model_size: str = Field(
         "small", description="Default Whisper model size identifier (tiny, base, small, medium, large)"
     )
+    whisper_model_id: str = Field(
+        "",
+        description=(
+            "Optional explicit faster-whisper model identifier or local path. When provided this overrides"
+            " LAO_TUTOR_WHISPER_MODEL_SIZE so you can load fine-tuned checkpoints such as"
+            " `Systran/faster-whisper-large-v2`."
+        ),
+    )
+    whisper_compute_type: str = Field(
+        "default",
+        description=(
+            "Compute type hint for faster-whisper (default, int8, int8_float16, float16, float32)."
+            " Adjust this to leverage GPU quantisation or higher precision as needed."
+        ),
+    )
     whisper_language: str = Field(
         "lo",
         description="Optional language hint passed to Whisper. Set to an empty string to rely on automatic detection.",

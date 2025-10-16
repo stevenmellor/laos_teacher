@@ -124,6 +124,34 @@ def test_conversation_extracts_lao_from_translation(monkeypatch: pytest.MonkeyPa
     assert any("\u0E80" <= ch <= "\u0EFF" for ch in payload["spoken_text"])
 
 
+def test_conversation_matches_romanised_input(monkeypatch: pytest.MonkeyPatch):
+    """Romanised Lao phrases should still trigger Lao focus responses."""
+
+    from backend.app.services.translation import TranslationResult
+
+    logger.info("Running romanised Lao mapping test")
+    client = TestClient(app)
+
+    def fake_translate(_: str) -> TranslationResult:
+        # Simulate the reverse translator not yielding Lao script so the romanised matcher must engage.
+        return TranslationResult(text="Sabaidee", backend="stub", direction="en->lo")
+
+    monkeypatch.setattr(main_module.tutor_engine.translator, "translate", fake_translate)
+
+    response = client.post(
+        "/api/v1/conversation",
+        json={"message": "Sabaidee", "history": []},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+
+    assert payload["focus_phrase"] == "ສະບາຍດີ"
+    assert payload["focus_translation"] == "Hello"
+    assert payload["spoken_text"].startswith("ສະບາຍດີ")
+    assert payload["focus_phrase"] in payload["reply"]["content"]
+
+
 def test_conversation_rejects_empty_payload():
     logger.info("Running conversation validation test")
     client = TestClient(app)

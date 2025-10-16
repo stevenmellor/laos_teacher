@@ -39,25 +39,30 @@ class AsrService:
     def __init__(self, model_size: Optional[str] = None, device: str = "auto") -> None:
         settings = get_settings()
         self.model_size = model_size or settings.whisper_model_size
+        self.model_identifier = settings.whisper_model_id.strip() or self.model_size
         self.device = device
         self._model: Optional[WhisperModel] = None  # type: ignore[assignment]
         self._language_hint = settings.whisper_language.strip() or None
         self._auto_detect_fallback = settings.whisper_auto_detect_fallback
+        self._compute_type = settings.whisper_compute_type
 
         if _whisper_supported():
             try:
                 self._model = WhisperModel(
-                    self.model_size,
+                    self.model_identifier,
                     device=self.device,
+                    compute_type=self._compute_type,
                     download_root=str(settings.model_dir),
                 )
                 logger.info(
                     "Loaded Whisper model",
                     extra={
                         "model_size": self.model_size,
+                        "model_identifier": self.model_identifier,
                         "device": self.device,
                         "language_hint": self._language_hint or "auto",
                         "auto_detect_fallback": self._auto_detect_fallback,
+                        "compute_type": self._compute_type,
                     },
                 )
             except Exception as exc:  # pragma: no cover - best-effort load

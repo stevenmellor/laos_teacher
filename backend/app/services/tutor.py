@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from difflib import SequenceMatcher
 from typing import Dict, List, Optional
 
 import re
@@ -41,6 +42,7 @@ class TutorEngine:
         self.translator = TranslationService()
         self.state = TutorState()
         self._phrase_bank = self._load_phrase_bank()
+        self._romanised_cache: Dict[str, str] = {}
         logger.info(
             "Tutor engine initialised",
             extra={
@@ -77,6 +79,24 @@ class TutorEngine:
             return ""
         lowered = text.lower().strip()
         return re.sub(r"[^a-z0-9\s]", "", lowered)
+
+    def _normalize_romanised(self, text: str) -> str:
+        if not text:
+            return ""
+        return re.sub(r"[^a-z]", "", text.lower())
+
+    def _get_cached_romanised(self, phrase: str) -> str:
+        cached = self._romanised_cache.get(phrase)
+        if cached is not None:
+            return cached
+        romanised = self.text_processor.segment(phrase).romanised
+        normalized = self._normalize_romanised(romanised)
+        self._romanised_cache[phrase] = normalized
+        logger.debug(
+            "Cached romanised key",
+            extra={"phrase": phrase, "normalized": normalized},
+        )
+        return normalized
 
     def _find_phrase_by_translation(self, text: str) -> tuple[Optional[str], Optional[str]]:
         """Return the best Lao phrase whose English gloss resembles *text*."""
@@ -120,6 +140,42 @@ class TutorEngine:
                             "translation": translation,
                             "score": score,
                             "normalized_query": normalized,
+                        },
+                    )
+
+        return best_phrase, best_translation
+
+    def _find_phrase_by_romanised(self, text: str) -> tuple[Optional[str], Optional[str]]:
+        """Match ASCII/romanised learner input back to a Lao focus phrase."""
+
+        normalized_query = self._normalize_romanised(text)
+        if not normalized_query:
+            return None, None
+
+        best_phrase: Optional[str] = None
+        best_translation: Optional[str] = None
+        best_score = 0.0
+
+        for task, phrases in self._phrase_bank.items():
+            for phrase, translation in phrases.items():
+                romanised_key = self._get_cached_romanised(phrase)
+                if not romanised_key:
+                    continue
+                ratio = SequenceMatcher(None, normalized_query, romanised_key).ratio()
+                if ratio < 0.55:
+                    continue
+                if ratio > best_score:
+                    best_phrase = phrase
+                    best_translation = translation
+                    best_score = ratio
+                    logger.debug(
+                        "Matched romanised input to Lao phrase",
+                        extra={
+                            "phrase": phrase,
+                            "translation": translation,
+                            "ratio": ratio,
+                            "normalized_query": normalized_query,
+                            "task": task,
                         },
                     )
 
@@ -205,8 +261,20 @@ class TutorEngine:
                 focus_translation = translation
                 focus_romanised = segmented.romanised
             else:
+                romanised_match, romanised_translation = self._find_phrase_by_romanised(asr_result.text)
                 matched_phrase, matched_translation = self._find_phrase_by_translation(asr_result.text)
-                if matched_phrase:
+                if romanised_match:
+                    focus_phrase = romanised_match
+                    focus_translation = romanised_translation or translation or asr_result.text
+                    focus_romanised = self.text_processor.segment(romanised_match).romanised
+                    corrections.append(
+                        (
+                            f"Let's learn to say '{focus_translation}' in Lao: {focus_phrase}"
+                            f" ({focus_romanised})."
+                        )
+                    )
+                    translation = focus_translation
+                elif matched_phrase:
                     focus_phrase = matched_phrase
                     focus_translation = matched_translation or translation or asr_result.text
                     focus_romanised = self.text_processor.segment(matched_phrase).romanised

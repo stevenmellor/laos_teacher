@@ -16,6 +16,7 @@ This repository contains an experimental, local-first Lao (ລາວ) language t
 - Optional Lao→English translation via Hugging Face NLLB so every tutor reply pairs Lao script with an English gloss
 - English-first teaching loop that maps recognised English phrases to Lao focus sentences with romanisation so learners always
   know what they are hearing and why it matters
+- Romanised input matching so speaking or typing "sabaidee" still links back to the Lao script focus phrase
 
 ## Getting started
 
@@ -102,6 +103,8 @@ All runtime settings can be provided through environment variables (prefixed wit
 | `LAO_TUTOR_MODEL_DIR` | `~/.cache/lao_tutor/models` | Location where downloaded ML model weights are stored. |
 | `LAO_TUTOR_LOG_DIR` | `logs` | Directory where rotating log files (`app.log`) are written. |
 | `LAO_TUTOR_WHISPER_MODEL_SIZE` | `small` | Whisper checkpoint family to load for ASR (`tiny`, `base`, `small`, `medium`, `large`). |
+| `LAO_TUTOR_WHISPER_MODEL_ID` | *(empty)* | Optional explicit faster-whisper identifier or local path (e.g. `Systran/faster-whisper-large-v2`). Overrides the size selector when set. |
+| `LAO_TUTOR_WHISPER_COMPUTE_TYPE` | `default` | Compute type hint for faster-whisper (`default`, `int8`, `int8_float16`, `float16`, `float32`). |
 | `LAO_TUTOR_WHISPER_LANGUAGE` | `lo` | Language hint passed to Whisper (`""` falls back to automatic detection). |
 | `LAO_TUTOR_WHISPER_AUTO_DETECT_FALLBACK` | `true` | Rerun ASR without a language hint when no Lao characters are detected so English utterances are still understood. |
 | `LAO_TUTOR_SQLITE_PATH` | `data/tutor.db` | Path to the SQLite database backing the SRS store. |
