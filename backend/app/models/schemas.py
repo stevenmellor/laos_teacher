@@ -24,6 +24,10 @@ class SegmentFeedback(BaseModel):
 
     lao_text: str = Field(..., description="Recognised Lao text")
     romanised: str = Field(..., description="BGN/PCGN romanised text")
+    raw_transcript: Optional[str] = Field(
+        default=None,
+        description="Raw transcription returned by ASR before Lao mapping",
+    )
     translation: Optional[str] = Field(None, description="English gloss")
     corrections: List[str] = Field(default_factory=list, description="List of correction hints")
     praise: Optional[str] = Field(None, description="Positive reinforcement message")

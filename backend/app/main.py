@@ -160,6 +160,8 @@ def handle_utterance(payload: UtteranceRequest) -> UtteranceResponse:
         "vad_backend": tutor_engine.vad.backend_name,
         **tutor_engine.dependency_status(),
     }
+    if feedback.raw_transcript is not None:
+        debug_info["raw_transcript"] = feedback.raw_transcript
     return UtteranceResponse(
         feedback=feedback,
         teacher_audio_base64=teacher_audio_base64,
@@ -243,6 +245,8 @@ def handle_conversation(payload: ConversationRequest) -> ConversationResponse:
                 "vad_backend": tutor_engine.vad.backend_name,
             }
         )
+        if utterance_feedback and utterance_feedback.raw_transcript is not None:
+            debug_payload["raw_transcript"] = utterance_feedback.raw_transcript
     else:
         debug_payload.setdefault("audio_processed", False)
 

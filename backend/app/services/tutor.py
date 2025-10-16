@@ -300,6 +300,9 @@ class TutorEngine:
         )
         segmented = self.text_processor.segment(asr_result.text)
         translation = self._phrase_bank.get(self.state.current_task, {}).get(asr_result.text)
+        raw_transcript = asr_result.text
+        heard_phrase = asr_result.text
+        heard_romanised = segmented.romanised
         focus_from_translation: Optional[str] = None
         if translation is None and asr_result.text:
             translation_result = self.translator.translate(asr_result.text)
@@ -355,10 +358,14 @@ class TutorEngine:
                     praise = "ຍອດເຢັ່ຍ! Your pronunciation is improving."
                     success = True
                     completed_focus = expected_phrase
+                    heard_phrase = expected_phrase
+                    heard_romanised = focus_romanised
                 else:
                     focus_phrase = asr_result.text
                     focus_translation = translation
                     focus_romanised = segmented.romanised
+                    heard_phrase = asr_result.text
+                    heard_romanised = segmented.romanised
             else:
                 romanised_match, romanised_translation = self._find_phrase_by_romanised(asr_result.text)
                 matched_phrase, matched_translation = self._find_phrase_by_translation(asr_result.text)
@@ -377,6 +384,8 @@ class TutorEngine:
                     translation = focus_translation
                     success = True
                     completed_focus = expected_phrase
+                    heard_phrase = expected_phrase
+                    heard_romanised = focus_romanised
                 elif romanised_match:
                     focus_phrase = romanised_match
                     focus_translation = romanised_translation or translation or asr_result.text
@@ -388,6 +397,8 @@ class TutorEngine:
                         )
                     )
                     translation = focus_translation
+                    heard_phrase = romanised_match
+                    heard_romanised = focus_romanised
                 elif matched_phrase:
                     focus_phrase = matched_phrase
                     focus_translation = matched_translation or translation or asr_result.text
@@ -399,6 +410,8 @@ class TutorEngine:
                         )
                     )
                     translation = focus_translation
+                    heard_phrase = matched_phrase
+                    heard_romanised = focus_romanised
                 elif focus_from_translation:
                     focus_phrase = focus_from_translation
                     focus_translation = translation or asr_result.text
@@ -410,6 +423,8 @@ class TutorEngine:
                         )
                     )
                     translation = focus_translation
+                    heard_phrase = focus_phrase
+                    heard_romanised = focus_romanised
                 elif translation:
                     corrections.append(
                         f"We'll map your English phrase to Lao together. Try saying the Lao for '{translation}'."
@@ -451,7 +466,8 @@ class TutorEngine:
                 logger.info(
                     "Learner phrase recognised",
                     extra={
-                        "text": asr_result.text,
+                        "text": heard_phrase,
+                        "raw_transcript": raw_transcript,
                         "card_id": card_id,
                         "task": self.state.current_task,
                         "success": success,
@@ -460,6 +476,14 @@ class TutorEngine:
 
         if focus_phrase and not focus_romanised:
             focus_romanised = self.text_processor.segment(focus_phrase).romanised
+
+        if heard_phrase and contains_lao_characters(heard_phrase):
+            if not heard_romanised:
+                heard_romanised = self.text_processor.segment(heard_phrase).romanised
+        elif not heard_phrase:
+            heard_phrase = raw_transcript
+        if not heard_romanised and heard_phrase:
+            heard_romanised = self.text_processor.segment(heard_phrase).romanised
 
         review_ids: List[str] = []
         if focus_phrase:
@@ -480,6 +504,21 @@ class TutorEngine:
                     )
                 )
 
+        if (
+            heard_phrase
+            and raw_transcript
+            and heard_phrase != raw_transcript
+            and contains_lao_characters(heard_phrase)
+        ):
+            logger.info(
+                "Mapped non-Lao transcription to Lao focus phrase",
+                extra={
+                    "raw_transcript": raw_transcript,
+                    "mapped_phrase": heard_phrase,
+                    "task": self.state.current_task,
+                },
+            )
+
         logger.info(
             "Segment feedback prepared",
             extra={
@@ -490,8 +529,9 @@ class TutorEngine:
             },
         )
         return SegmentFeedback(
-            lao_text=asr_result.text,
-            romanised=segmented.romanised,
+            lao_text=heard_phrase,
+            romanised=heard_romanised,
+            raw_transcript=raw_transcript,
             translation=translation,
             corrections=corrections,
             praise=praise,

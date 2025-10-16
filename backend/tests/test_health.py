@@ -218,6 +218,7 @@ def test_conversation_audio_roundtrip_includes_teacher_audio(monkeypatch: pytest
     assert data["heard_text"] == "ທົດລອງ"
     assert data["teacher_audio_base64"] == fake_teacher_audio
     assert data["teacher_audio_sample_rate"] == 16000
+    assert data["utterance_feedback"]["raw_transcript"] == "ທົດລອງ"
     assert data["utterance_feedback"] is not None
     assert data["utterance_feedback"]["focus_phrase"] == "ທົດລອງ"
     assert "I heard you say" in data["reply"]["content"]
@@ -231,6 +232,7 @@ def test_utterance_endpoint_returns_feedback(monkeypatch: pytest.MonkeyPatch):
     fake_feedback = SegmentFeedback(
         lao_text="ສະບາຍດີ",
         romanised="sa bai di",
+        raw_transcript="ສະບາຍດີ",
         translation="Hello",
         corrections=["Great attempt!"],
         praise="Nice work",
@@ -272,6 +274,7 @@ def test_utterance_endpoint_returns_feedback(monkeypatch: pytest.MonkeyPatch):
     assert body["teacher_audio_base64"] == teacher_audio
     assert body["teacher_audio_sample_rate"] == 16000
     assert body["feedback"]["lao_text"] == "ສະບາຍດີ"
+    assert body["feedback"]["raw_transcript"] == "ສະບາຍດີ"
     assert body["feedback"]["praise"] == "Nice work"
     assert body["debug"]["vad_backend"]
 

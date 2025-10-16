@@ -144,6 +144,10 @@ class ConversationService:
                 lines.append(
                     f"I heard you say \"{observation.lao_text}\"{romanised_note}. In English, that means \"{observed_translation}\"."
                 )
+                if observation.raw_transcript and observation.raw_transcript != observation.lao_text:
+                    lines.append(
+                        f"Whisper first transcribed it as \"{observation.raw_transcript}\", so keep leaning into the Lao sounds."
+                    )
             else:
                 lines.append(
                     f"I heard you say \"{observation.lao_text}\" in English. Let's express that in Lao together."
