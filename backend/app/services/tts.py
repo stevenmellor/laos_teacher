@@ -90,6 +90,14 @@ class TtsService:
         if not self.is_ready:
             logger.debug("Returning placeholder TTS", extra={"text": text})
             return None
+        logger.info(
+            "Synthesising speech",
+            extra={
+                "text_preview": text[:32],
+                "model": self.model_name,
+                "device": str(self._torch_device or "cpu"),
+            },
+        )
         inputs = self._tokenizer(text, return_tensors="pt")  # type: ignore[operator]
         input_ids = inputs.get("input_ids")  # type: ignore[assignment]
         if input_ids is None or input_ids.shape[-1] <= 1:
@@ -108,6 +116,10 @@ class TtsService:
         logger.debug(
             "Synthesised speech",
             extra={"text_length": len(text), "sample_rate": sample_rate},
+        )
+        logger.info(
+            "Speech synthesis complete",
+            extra={"sample_rate": sample_rate, "duration_samples": audio.size},
         )
         return TtsResult(audio_base64=audio_base64, sample_rate=sample_rate)
 

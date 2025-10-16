@@ -14,6 +14,7 @@ from fastapi.templating import Jinja2Templates
 
 from .config import get_settings
 from .logging_utils import configure_logging, get_logger
+from .middleware.request_logging import RequestLoggingMiddleware
 from .models.schemas import (
     ChatMessage,
     ConversationRequest,
@@ -33,6 +34,8 @@ settings = get_settings()
 configure_logging(settings.log_dir)
 logger = get_logger(__name__)
 logger.info("Application initialised", extra={"log_dir": str(settings.log_dir)})
+
+app.add_middleware(RequestLoggingMiddleware)
 
 try:
     templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))

@@ -104,8 +104,16 @@ class ConversationService:
         else:
             bank = next(iter(self._phrase_bank.values()), {})
         if not bank:
+            logger.debug(
+                "No focus phrase available",
+                extra={"task_id": task_id},
+            )
             return None, None
         phrase, translation = next(iter(bank.items()))
+        logger.debug(
+            "Selected focus phrase",
+            extra={"task_id": task_id, "phrase": phrase, "translation": translation},
+        )
         return phrase, translation
 
     def _romanise(self, text: Optional[str]) -> str:

@@ -133,6 +133,10 @@ class TranslationService:
             )
             return None
 
+        logger.info(
+            "Translation requested",
+            extra={"direction": direction, "backend": backend, "length": len(text)},
+        )
         try:
             outputs = translator(text)
         except Exception as exc:  # pragma: no cover - runtime guard
@@ -158,6 +162,10 @@ class TranslationService:
         logger.debug(
             "Translation completed",
             extra={"source": text, "translation": translation, "direction": direction},
+        )
+        logger.info(
+            "Translation succeeded",
+            extra={"direction": direction, "backend": backend},
         )
         return TranslationResult(text=translation, backend=backend, direction=direction)
 

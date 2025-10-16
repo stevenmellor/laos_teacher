@@ -8,5 +8,6 @@ logger.debug("Backend app package initialised")
 __all__ = [
     "config",
     "logging_utils",
+    "middleware",
     "main",
 ]

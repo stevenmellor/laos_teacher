@@ -91,6 +91,15 @@ class AsrService:
     def transcribe(self, audio: np.ndarray, sample_rate: int) -> AsrResult:
         """Transcribe the audio buffer into Lao text."""
 
+        logger.info(
+            "Transcription requested",
+            extra={
+                "frames": int(audio.size),
+                "sample_rate": sample_rate,
+                "ready": self.is_ready,
+                "language_hint": self._language_hint or "auto",
+            },
+        )
         if not self.is_ready:
             logger.debug("Returning placeholder transcription")
             return AsrResult(text="", language=None, confidence=0.0)

@@ -2,6 +2,7 @@ import base64
 import struct
 
 import pytest
+from types import MethodType
 
 from fastapi.testclient import TestClient
 
@@ -10,6 +11,7 @@ from backend.app.logging_utils import get_logger
 from backend.app.main import app
 from backend.app.services.asr import AsrResult
 from backend.app.services.tts import TtsResult
+from backend.app.models.schemas import SegmentFeedback
 
 logger = get_logger(__name__)
 logger.debug("Test module loaded")
@@ -220,3 +222,65 @@ def test_conversation_audio_roundtrip_includes_teacher_audio(monkeypatch: pytest
     assert data["utterance_feedback"]["focus_phrase"] == "ທົດລອງ"
     assert "I heard you say" in data["reply"]["content"]
     assert "System:" not in data["reply"]["content"]
+
+
+def test_utterance_endpoint_returns_feedback(monkeypatch: pytest.MonkeyPatch):
+    logger.info("Running utterance endpoint feedback test")
+    client = TestClient(app)
+
+    fake_feedback = SegmentFeedback(
+        lao_text="ສະບາຍດີ",
+        romanised="sa bai di",
+        translation="Hello",
+        corrections=["Great attempt!"],
+        praise="Nice work",
+        review_card_ids=["card-hello"],
+        focus_phrase="ສະບາຍດີ",
+        focus_translation="Hello",
+        focus_romanised="sa bai di",
+    )
+
+    fake_audio = base64.b64encode(struct.pack("<16h", *([1200] * 16))).decode("utf-8")
+    teacher_audio = base64.b64encode(struct.pack("<8h", *([900] * 8))).decode("utf-8")
+
+    def stub_process_audio(self, audio, sample_rate, task_id=None):
+        assert sample_rate == 16000
+        return fake_feedback
+
+    def stub_prepare_audio(self, feedback=None, text_override=None):
+        assert feedback == fake_feedback
+        return TtsResult(audio_base64=teacher_audio, sample_rate=16000)
+
+    monkeypatch.setattr(
+        main_module.tutor_engine,
+        "process_audio",
+        MethodType(stub_process_audio, main_module.tutor_engine),
+    )
+    monkeypatch.setattr(
+        main_module.tutor_engine,
+        "prepare_teacher_audio",
+        MethodType(stub_prepare_audio, main_module.tutor_engine),
+    )
+
+    response = client.post(
+        "/api/v1/utterance",
+        json={"audio_base64": fake_audio, "sample_rate": 16000},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["teacher_audio_base64"] == teacher_audio
+    assert body["teacher_audio_sample_rate"] == 16000
+    assert body["feedback"]["lao_text"] == "ສະບາຍດີ"
+    assert body["feedback"]["praise"] == "Nice work"
+    assert body["debug"]["vad_backend"]
+
+
+def test_utterance_endpoint_rejects_invalid_audio():
+    logger.info("Running utterance invalid audio test")
+    client = TestClient(app)
+    response = client.post(
+        "/api/v1/utterance",
+        json={"audio_base64": "!!!", "sample_rate": 16000},
+    )
+    assert response.status_code == 400

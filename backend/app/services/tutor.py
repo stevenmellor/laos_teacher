@@ -238,6 +238,14 @@ class TutorEngine:
         if task_id:
             self.state.current_task = task_id
             logger.debug("Task updated", extra={"task_id": task_id})
+        logger.info(
+            "Processing learner audio",
+            extra={
+                "frames": int(audio.size),
+                "sample_rate": sample_rate,
+                "task": self.state.current_task,
+            },
+        )
         if not self.asr.is_ready:
             logger.error(
                 "ASR backend unavailable", extra={"task": self.state.current_task}
@@ -260,6 +268,14 @@ class TutorEngine:
         expected_normalised = self._normalize_romanised(expected_romanised)
 
         vad_result = self.vad.detect(audio, sample_rate)
+        logger.info(
+            "VAD evaluated audio",
+            extra={
+                "backend": self.vad.backend_name,
+                "has_speech": vad_result.has_speech,
+                "probability": round(vad_result.probability, 3),
+            },
+        )
         if not vad_result.has_speech:
             logger.debug(
                 "No speech detected",
@@ -274,6 +290,14 @@ class TutorEngine:
             )
 
         asr_result = self.asr.transcribe(audio, sample_rate)
+        logger.info(
+            "ASR completed",
+            extra={
+                "text": asr_result.text,
+                "language": asr_result.language,
+                "confidence": round(asr_result.confidence, 3),
+            },
+        )
         segmented = self.text_processor.segment(asr_result.text)
         translation = self._phrase_bank.get(self.state.current_task, {}).get(asr_result.text)
         focus_from_translation: Optional[str] = None
@@ -456,6 +480,15 @@ class TutorEngine:
                     )
                 )
 
+        logger.info(
+            "Segment feedback prepared",
+            extra={
+                "focus_phrase": focus_phrase,
+                "translation": translation,
+                "corrections": len(corrections),
+                "praise": bool(praise),
+            },
+        )
         return SegmentFeedback(
             lao_text=asr_result.text,
             romanised=segmented.romanised,
